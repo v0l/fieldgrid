@@ -1,63 +1,62 @@
-# fieldgrid
+# sims
 
-Grids, mesh rasterising, a wgpu compute harness and an FDTD engine, shared by the field
-solvers in [gcad](https://github.com/v0l/gcad), [agentee](https://github.com/v0l/agentee) and
-[antenna-toolbox](https://github.com/v0l/antenna-toolbox). It runs natively and in the browser
-through WebGPU.
+Physics solvers that do not depend on any one app. They came out of
+[gcad](https://github.com/v0l/gcad), [agentee](https://github.com/v0l/agentee) and
+[antenna-toolbox](https://github.com/v0l/antenna-toolbox), which now build on them. Each solver
+is its own crate, so an app pulls in only what it uses.
 
-It is not on crates.io. Pin a revision:
+| crate | what it solves |
+|---|---|
+| `fieldgrid` | Rectilinear grids, triangle BVH, mesh rasterising, a wgpu compute harness, and a Yee-grid FDTD engine with CPML, lumped ports, Debye loss and near-to-far-field |
+| `sims-fem` | Quadratic tetrahedral finite elements: elastic statics with contact, friction and bonded parts, heat conduction, modal (LOBPCG) and buckling analysis |
+| `sims-tet` | Delaunay tetrahedral meshing of a closed surface mesh: boundary recovery, quality refinement, sliver removal, flips and smoothing |
+| `sims-circuit` | A SPICE-style circuit simulator: operating point, AC sweep, transient and noise, with diodes, BJTs, MOSFETs, op-amps and LDOs |
+| `sims-quasistatic` | 2D transmission-line cross-sections (impedance, coupling, delay), conductor and dielectric loss with roughness and ENIG, and a 3D DC conduction grid, on the GPU or the CPU |
+| `sims-rf` | S-parameter networks: Touchstone, joining ports, noise, stability, step and TDR responses |
+| `sims-progress` | Named progress stages that long solves report to one listener |
+
+Pin a revision from git. A crate is found by name:
 
 ```toml
-fieldgrid = { git = "https://github.com/v0l/fieldgrid", rev = "..." }
+sims-fem = { git = "https://github.com/v0l/sims", rev = "..." }
+fieldgrid = { git = "https://github.com/v0l/sims", rev = "..." }
 ```
 
-## Modules
+## Using the mesher and FEM
 
-| module | what it holds |
-|---|---|
-| `grid` | Rectilinear grids: uniform and graded mesh lines, smoothing, padding, nearest line and cell lookups |
-| `bvh` | A triangle BVH with ray casts |
-| `raster` | Meshes onto grids: `fill` marks samples inside a mesh and walls thinner than a cell, `solid_cells` and `solid_edges` do the same for closed solids, `sheet_edges` snaps zero-thickness sheets onto Yee edges, `closed` tells the two kinds apart |
-| `gpu` | Opens a wgpu device (`Options` picks the backends, whether a software adapter is allowed and the storage buffer count), makes buffers and pipelines, and reads back with or without blocking |
-| `fdtd` | A Yee-grid FDTD engine (below) |
-
-## FDTD
-
-`fdtd::Sim` holds a graded grid with CPML, per-cell materials with Debye loss, metal and
-surface-impedance sheets on edges, lumped ports and RLC elements, plane field DFTs and a
-near-to-far-field box. It steps on the GPU with `run` (async, so it works on WebGPU) or
-`run_blocking`, or on the CPU with `run_cpu`. The CPU stepper is a port of every kernel and the
-tests hold the two to float rounding. `ntff::Far` turns the recorded box into far fields,
-radiation intensity and radiated power.
-
-The engine knows nothing about boards or antennas. Each app builds the `Sim`: agentee from a
-PCB stack-up, antenna-toolbox from boxes and STL meshes. `tests/fdtd.rs` builds small ones by
-hand.
-
-## Example
-
-`examples/cube.rs` finds the cells inside a closed mesh:
+`sims-tet` takes a closed triangle mesh as a `SurfaceMesh<S>`, where `S` says what each tagged
+face really is. The mesher and the quadratic elements snap new boundary nodes onto it through the
+`Surface` trait. gcad passes exact B-rep surfaces; `()` keeps the triangles as they are.
 
 ```rust
-let grid = Grid::uniform([0.0; 3], [1.0; 3], [20; 3], 0);
-let inside = solid_cells(&Bvh::new(cube), &grid);
+let tets = sims_tet::fill(surface, 2.5, &|_| {})?;
+let mesh = sims_fem::Quadratic::from(&tets);
 ```
 
-```
-cargo run --example cube
-```
+Then describe the supports and loads by face tag in an `elastic::Problem` and call
+`elastic::solve`. `crates/sims-fem/tests/bar.rs` does this for a bar pulled at one end and
+checks the stretch against FL/AE.
+
+## GPUs
+
+GPU solvers take an `Option<&fieldgrid::Gpu>` and fall back to the CPU without one. Open a
+device once with `fieldgrid::Gpu::open_blocking` and pass it to each. In the browser the
+blocking readbacks are not available, so `sims-quasistatic` runs on the CPU there.
+
+## Progress
+
+`sims-fem` reports stages such as factoring and iterating through `sims-progress`. Call
+`sims_progress::listen` with a closure to receive them; with no listener they do nothing.
 
 ## Tests
 
-`cargo test` runs everything. Tests that need a GPU skip when no adapter opens; with
-`--features gpu-tests` they fail instead. CI runs them on Mesa's software Vulkan driver:
+`cargo test --workspace` runs everything. Tests that need a GPU skip when no adapter opens; with
+`--all-features` the `fieldgrid` ones fail instead. CI runs them on Mesa's software Vulkan
+driver:
 
 ```
-VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json cargo test --release --features gpu-tests
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json cargo test --release --workspace --all-features
 ```
-
-Parallel device creation can crash some Vulkan validation layers, so the FDTD tests take a
-shared lock.
 
 ## Licence
 
