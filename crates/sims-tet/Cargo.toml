@@ -1,0 +1,15 @@
+[package]
+name = "sims-tet"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Delaunay tetrahedral meshing of closed surface meshes, with quality refinement, sliver removal, flips and smoothing"
+
+[dependencies]
+anyhow.workspace = true
+cgmath.workspace = true
+fieldgrid.workspace = true
+rayon.workspace = true
+robust = "1.2"

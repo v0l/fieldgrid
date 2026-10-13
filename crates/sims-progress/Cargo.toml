@@ -1,0 +1,11 @@
+[package]
+name = "sims-progress"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Named progress stages that long solves report to one global listener"
+
+[dependencies]
+web-time = "1"

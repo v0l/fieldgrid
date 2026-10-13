@@ -14,6 +14,11 @@ fieldgrid = { path = "crates/fieldgrid" }
 sims-rf = { path = "crates/sims-rf" }
 sims-circuit = { path = "crates/sims-circuit" }
 sims-quasistatic = { path = "crates/sims-quasistatic" }
+sims-progress = { path = "crates/sims-progress" }
+sims-tet = { path = "crates/sims-tet" }
+sims-fem = { path = "crates/sims-fem" }
+cgmath = { version = "0.18", features = ["serde"] }
+anyhow = "1"
 bytemuck = "1.25"
 rayon = "1.11"
 wgpu = "29"

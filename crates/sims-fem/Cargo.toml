@@ -1,0 +1,16 @@
+[package]
+name = "sims-fem"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Quadratic tetrahedral finite elements: linear elastic statics with contact and bonding, heat conduction, modal and buckling analysis"
+
+[dependencies]
+anyhow.workspace = true
+serde.workspace = true
+faer = { workspace = true, features = ["sparse-linalg"] }
+rayon.workspace = true
+sims-progress.workspace = true
+sims-tet.workspace = true
