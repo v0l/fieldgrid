@@ -8,6 +8,7 @@ is its own crate, so an app pulls in only what it uses.
 | crate | what it solves |
 |---|---|
 | `sims-field` | Rectilinear grids, triangle BVH, mesh rasterising, a wgpu compute harness, and a Yee-grid FDTD engine with CPML, lumped ports, Debye loss and near-to-far-field |
+| `sims-flow` | A GPU lattice Boltzmann solver for air: D3Q19 with LES, coupled D3Q7 heat, turning rotors, drag and surface pressure on voxelised parts |
 | `sims-fem` | Quadratic tetrahedral finite elements: elastic statics with contact, friction and bonded parts, heat conduction, modal (LOBPCG) and buckling analysis |
 | `sims-tet` | Delaunay tetrahedral meshing of a closed surface mesh: boundary recovery, quality refinement, sliver removal, flips and smoothing |
 | `sims-circuit` | A SPICE-style circuit simulator: operating point, AC sweep, transient and noise, with diodes, BJTs, MOSFETs, op-amps and LDOs |
@@ -29,7 +30,7 @@ face really is. The mesher and the quadratic elements snap new boundary nodes on
 `Surface` trait. gcad passes exact B-rep surfaces; `()` keeps the triangles as they are.
 
 ```rust
-let tets = sims_tet::fill(surface, 2.5, &|_| {})?;
+let tets = sims_tet::fill(surface, 2.5)?;
 let mesh = sims_fem::Quadratic::from(&tets);
 ```
 
@@ -45,18 +46,26 @@ blocking readbacks are not available, so `sims-quasistatic` runs on the CPU ther
 
 ## Progress
 
-`sims-fem` reports stages such as factoring and iterating through `sims-progress`. Call
-`sims_progress::listen` with a closure to receive them; with no listener they do nothing.
+Every solver reports what it is doing through `sims-progress`: FDTD time steps, circuit
+analyses, meshing, factoring and iterating, lattice steps. Call `sims_progress::listen` with
+a closure to receive the stages; with no listener they do nothing. A new solver has to report
+too, with a test that listens for its stages.
 
 ## Tests
 
 `cargo test --workspace` runs everything. Tests that need a GPU skip when no adapter opens; with
-`--all-features` the `sims-field` ones fail instead. CI runs them on Mesa's software Vulkan
-driver:
+`--features sims-field/gpu-tests` the `sims-field` ones fail instead. CI runs them on Mesa's
+software Vulkan driver:
 
 ```
-VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json cargo test --release --workspace --all-features
+VK_ICD_FILENAMES=/usr/share/vulkan/icd.d/lvp_icd.json cargo test --release --workspace --features sims-field/gpu-tests
 ```
+
+The `sims-flow` validation cases (Poiseuille, the lid-driven cavity against Ghia, Schaefer-Turek,
+heat conduction, turning walls) need a real GPU and a few minutes:
+`cargo test --release -p sims-flow --features gpu-tests`.
+
+Open work is in `todo.md`.
 
 ## Licence
 

@@ -67,3 +67,34 @@ fn an_rc_charges_to_63_percent_in_one_time_constant() {
     let v = res.waves[0].values[k];
     assert!((v - (1.0 - (-1.0f64).exp())).abs() < 0.01, "{v} V at {} s", res.times[k]);
 }
+
+fn stages_of(run: impl FnOnce()) -> Vec<String> {
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let into = seen.clone();
+    let listening = sims_progress::listen(move |r| into.lock().unwrap().push(r.stage.clone()));
+    run();
+    drop(listening);
+    seen.lock().unwrap().clone()
+}
+
+#[test]
+fn a_run_reports_its_analyses() {
+    let step = Wave::Pulse {
+        low: 0.0,
+        high: 1.0,
+        delay: 0.0,
+        rise: 1e-9,
+        fall: 1e-9,
+        width: 1.0,
+        period: 2.0,
+    };
+    let mut spec = rc(step, 0.0, 1.0);
+    spec.tran = Some((1e-3, 1e-5));
+    spec.ac = Some(Sweep { from: 10.0, to: 1e4, per_decade: 5 });
+    let stages = stages_of(|| {
+        run(&spec, "rc", 0);
+    });
+    for want in ["finding the operating point", "AC sweep", "transient"] {
+        assert!(stages.iter().any(|s| s == want), "{want} missing from {stages:?}");
+    }
+}

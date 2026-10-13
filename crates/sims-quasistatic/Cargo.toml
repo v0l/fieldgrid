@@ -10,6 +10,7 @@ description = "Quasi-static solvers: 2D transmission-line cross-sections, conduc
 [dependencies]
 sims-field.workspace = true
 sims-rf.workspace = true
+sims-progress.workspace = true
 serde.workspace = true
 bytemuck = { workspace = true, features = ["derive"] }
 wgpu.workspace = true

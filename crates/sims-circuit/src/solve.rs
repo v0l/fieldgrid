@@ -933,10 +933,13 @@ fn interp_lin(ts: &[f64], ys: &[f64], t: f64) -> Option<f64> {
 }
 
 pub fn run(spec: &CircuitSpec, name: &str, hash: u64) -> CircuitResult {
-    let t0 = std::time::Instant::now();
+    let t0 = web_time::Instant::now();
     let mut net = Net::build(spec);
     let mut res = CircuitResult { name: name.to_string(), spec_hash: hash, ..Default::default() };
-    let Some(op) = net.op(spec) else {
+    let operating = sims_progress::stage("finding the operating point", None, "");
+    let op = net.op(spec);
+    drop(operating);
+    let Some(op) = op else {
         res.failures.push("the operating point did not converge".into());
         res.seconds = t0.elapsed().as_secs_f64();
         return res;
@@ -966,7 +969,9 @@ pub fn run(spec: &CircuitSpec, name: &str, hash: u64) -> CircuitResult {
     if let Some(sw) = spec.ac {
         let freqs = sw.freqs();
         let rhs = net.ac_rhs(spec, None);
+        let sweeping = sims_progress::stage("AC sweep", Some(freqs.len()), "frequencies");
         for &f in &freqs {
+            sweeping.advance(1.0);
             let a = net.ac_matrix(spec, &op, std::f64::consts::TAU * f);
             let Some(x) = net.csolve(&a, &rhs, false) else {
                 res.failures.push(format!("the AC solve failed at {}", fmt_si(f, "Hz")));
@@ -1028,7 +1033,9 @@ pub fn run(spec: &CircuitSpec, name: &str, hash: u64) -> CircuitResult {
             .map(|n| if let Psd::Flicker(_, fc) = n.psd { fc } else { 0.0 })
             .collect();
         let mut input_curve = Vec::new();
+        let sweeping = sims_progress::stage("noise sweep", Some(freqs.len()), "frequencies");
         for &f in &freqs {
+            sweeping.advance(1.0);
             let a = net.ac_matrix(spec, &op, std::f64::consts::TAU * f);
             let mut e = vec![c64::new(0.0, 0.0); net.size];
             if let Some(o) = nz.output {
@@ -1098,7 +1105,9 @@ pub fn run(spec: &CircuitSpec, name: &str, hash: u64) -> CircuitResult {
         let mut fresh = true;
         let mut b = 0;
         let mut steps = 0usize;
+        let stepping = sims_progress::stage("transient", None, "");
         while t < stop * (1.0 - 1e-12) {
+            stepping.fraction(t / stop);
             while b < bps.len() && bps[b] <= t + step * 1e-9 {
                 b += 1;
             }

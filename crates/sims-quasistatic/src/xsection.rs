@@ -1,5 +1,7 @@
 use serde::Serialize;
 use sims_field::Gpu;
+
+const QUIET: std::time::Duration = std::time::Duration::from_millis(500);
 use sims_field::grid::{Grading, graded};
 
 pub const ETA0: f64 = 376.730_313_668;
@@ -210,6 +212,7 @@ pub fn solve_cpu(g: &Grid, vacuum: bool, tol: f64) -> Solve {
     let mut last = f64::MAX;
     let batch = 200;
     let mut iterations = 0;
+    let stage = sims_progress::stage_after("solving the cross-section", None, "iterations", QUIET);
     loop {
         for _ in 0..batch {
             for color in 0..2 {
@@ -245,6 +248,7 @@ pub fn solve_cpu(g: &Grid, vacuum: bool, tol: f64) -> Solve {
         }
         iterations += batch;
         let s = g.energy(&phi, &ex, &ey);
+        stage.fraction(sims_progress::residual_fraction(1.0, ((s - last) / s).abs(), tol));
         if ((s - last) / s).abs() < tol || iterations > 200_000 {
             return Solve { phi, sum: s, iterations };
         }
@@ -283,6 +287,7 @@ pub fn solve_gpu(gpu: &Gpu, g: &Grid, vacuum: bool, tol: f64) -> Solve {
     let batch = 500;
     let mut iterations = 0;
     let mut last = f64::MAX;
+    let stage = sims_progress::stage_after("solving the cross-section", None, "iterations", QUIET);
     loop {
         let mut enc = gpu.device.create_command_encoder(&Default::default());
         {
@@ -299,6 +304,7 @@ pub fn solve_gpu(gpu: &Gpu, g: &Grid, vacuum: bool, tol: f64) -> Solve {
         iterations += batch;
         let out: Vec<f32> = gpu.read(&phi, 0..g.nx * g.ny).expect("reading the potential");
         let s = g.energy(&out, &ex, &ey);
+        stage.fraction(sims_progress::residual_fraction(1.0, ((s - last) / s).abs(), tol));
         if ((s - last) / s).abs() < tol || iterations > 400_000 {
             return Solve { phi: out, sum: s, iterations };
         }

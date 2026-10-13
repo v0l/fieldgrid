@@ -28,7 +28,7 @@ jobs:
       - run: echo "VK_ICD_FILENAMES=$(ls /usr/share/vulkan/icd.d/lvp_icd*.json | head -1)" >> "$GITHUB_ENV"
       - uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
-      - run: cargo test --release --workspace --all-features
+      - run: cargo test --release --workspace --features sims-field/gpu-tests
 
   wasm:
     runs-on: ubuntu-latest

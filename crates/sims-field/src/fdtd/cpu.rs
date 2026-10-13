@@ -450,6 +450,7 @@ pub fn run_cpu(
     let chunk = if extras.check_every == 0 { 1000 } else { extras.check_every };
     let pulse_end = (2.0 * st.p.t0 / sim.dt) as usize;
     let (mut steps, mut peak, mut decay) = (0usize, 0f64, 0f64);
+    let stage = sims_progress::stage("FDTD time steps", Some(extras.max_steps), "steps");
     while steps < extras.max_steps {
         let k = chunk.min(extras.max_steps - steps);
         for s in 0..k {
@@ -462,6 +463,8 @@ pub fn run_cpu(
         }
         peak = peak.max(e);
         decay = if e > 0.0 && peak > 0.0 { 10.0 * (peak / e).log10() } else { 0.0 };
+        let goal = extras.decay_db;
+        stage.progress(steps as f64, || format!("{decay:.1} of {goal} dB down"));
         if !progress(steps, decay) {
             return Err("cancelled".into());
         }

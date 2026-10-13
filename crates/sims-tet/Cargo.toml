@@ -13,3 +13,4 @@ cgmath.workspace = true
 sims-field.workspace = true
 rayon.workspace = true
 robust = "1.2"
+sims-progress.workspace = true

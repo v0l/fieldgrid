@@ -2,6 +2,8 @@
 use bytemuck::{Pod, Zeroable};
 use sims_field::Gpu;
 
+const QUIET: std::time::Duration = std::time::Duration::from_millis(500);
+
 pub struct Problem {
     pub n: [usize; 3],
     pub gx: Vec<f32>,
@@ -235,7 +237,10 @@ impl Problem {
         let mut rz = dot(&r, &z);
         let mut it = 0;
         let mut rr = rr0;
+        let stage =
+            sims_progress::stage_after("solving the conduction grid", None, "iterations", QUIET);
         while it < max_iter && (rr / rr0).sqrt() > tol {
+            stage.fraction(sims_progress::residual_fraction(1.0, (rr / rr0).sqrt(), tol));
             let ap = apply(&p);
             let alpha = rz / dot(&p, &ap).max(1e-300);
             for i in 0..len {
@@ -372,7 +377,10 @@ impl Problem {
         let batch = 50;
         let mut it = 0;
         let mut residual = 1.0;
+        let stage =
+            sims_progress::stage_after("solving the conduction grid", None, "iterations", QUIET);
         while it < max_iter {
+            stage.fraction(sims_progress::residual_fraction(1.0, residual, tol));
             let mut enc = g.device.create_command_encoder(&Default::default());
             {
                 let mut pass = enc.begin_compute_pass(&Default::default());

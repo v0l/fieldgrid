@@ -9,4 +9,9 @@ description = "A SPICE-style circuit simulator: operating point, AC, transient a
 
 [dependencies]
 serde.workspace = true
+sims-progress.workspace = true
+web-time = "1"
 faer = { workspace = true, features = ["sparse-linalg"] }
+
+[dev-dependencies]
+sims-progress.workspace = true

@@ -659,6 +659,7 @@ pub async fn run(
     let pulse_end = (2.0 * t0 / sim.dt) as usize;
     let timer = kernel_timer(g, extras.profile);
     let mut timed_pipes = Vec::new();
+    let stage = sims_progress::stage("FDTD time steps", Some(max_steps), "steps");
     while steps < max_steps {
         let k = chunk.min(max_steps - steps);
         let mut enc = g.device.create_command_encoder(&Default::default());
@@ -711,6 +712,7 @@ pub async fn run(
         }
         peak = peak.max(e);
         decay = if e > 0.0 && peak > 0.0 { 10.0 * (peak / e).log10() } else { 0.0 };
+        stage.progress(steps as f64, || format!("{decay:.1} of {decay_db} dB down"));
         if !progress(steps, decay) {
             return Err("cancelled".into());
         }

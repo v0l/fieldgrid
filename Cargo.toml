@@ -17,6 +17,7 @@ sims-quasistatic = { path = "crates/sims-quasistatic" }
 sims-progress = { path = "crates/sims-progress" }
 sims-tet = { path = "crates/sims-tet" }
 sims-fem = { path = "crates/sims-fem" }
+sims-flow = { path = "crates/sims-flow" }
 cgmath = { version = "0.18", features = ["serde"] }
 anyhow = "1"
 bytemuck = "1.25"

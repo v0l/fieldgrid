@@ -108,14 +108,12 @@ fn bounds(points: &[Point3]) -> (Point3, Point3) {
 const RATIO: f64 = 2.0;
 const SLIVER: f64 = 10.0;
 
-pub fn fill<S: Surface + Clone>(
-    mut surface: SurfaceMesh<S>,
-    size: f64,
-    report: &dyn Fn(String),
-) -> Result<TetMesh<S>> {
+pub fn fill<S: Surface + Clone>(mut surface: SurfaceMesh<S>, size: f64) -> Result<TetMesh<S>> {
     if size <= 0.0 {
         bail!("the mesh size must be above zero");
     }
+    let stage = sims_progress::stage("filling the volume", None, "");
+    let report = |what: String| stage.detail(|| what);
     report(format!("{} surface triangles, filling the volume", surface.triangles.len()));
     let (low, high) = bounds(&surface.points);
     let span = (high - low).magnitude().max(1.0e-9);

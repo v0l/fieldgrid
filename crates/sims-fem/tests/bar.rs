@@ -60,7 +60,7 @@ fn bar(cell: f64) -> SurfaceMesh<()> {
 
 #[test]
 fn a_bar_in_tension_stretches_by_fl_over_ae() {
-    let tets = fill(bar(2.5), 2.5, &|_| {}).expect("meshes");
+    let tets = fill(bar(2.5), 2.5).expect("meshes");
     let quality = tets.quality();
     assert!((quality.volume / (LENGTH * SIDE * SIDE) - 1.0).abs() < 1e-9, "{quality:?}");
     let mesh = Quadratic::from(&tets);
@@ -91,4 +91,37 @@ fn a_bar_in_tension_stretches_by_fl_over_ae() {
     assert!((mean / exact - 1.0).abs() < 0.01, "{mean} against {exact}");
     let reaction = answer.reactions.iter().find(|r| r.0 == "end").expect("a reaction").1;
     assert!((reaction.x + force).abs() < force * 1e-6, "{reaction:?}");
+}
+
+fn stages_of(run: impl FnOnce()) -> Vec<String> {
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let into = seen.clone();
+    let listening = sims_progress::listen(move |r| into.lock().unwrap().push(r.stage.clone()));
+    run();
+    drop(listening);
+    seen.lock().unwrap().clone()
+}
+
+#[test]
+fn meshing_and_solving_report_progress() {
+    let stages = stages_of(|| {
+        let tets = fill(bar(5.0), 5.0).expect("meshes");
+        let mesh = Quadratic::from(&tets);
+        solve(&Problem {
+            mesh: &mesh,
+            materials: &[(200e3, 0.3)],
+            supports: &[Support { label: "end".into(), faces: vec![0], hold: Hold::Fixed }],
+            loads: &[Load {
+                label: "pull".into(),
+                faces: vec![1],
+                push: Push::Force(Vector3::new(1000.0, 0.0, 0.0)),
+            }],
+            body_force: None,
+            expansion: None,
+            wind: None,
+        })
+        .expect("solves");
+    });
+    assert!(stages.iter().any(|s| s == "filling the volume"), "{stages:?}");
+    assert!(stages.len() > 1, "{stages:?}");
 }

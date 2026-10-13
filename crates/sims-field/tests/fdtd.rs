@@ -227,3 +227,22 @@ fn an_empty_cavity_rings_at_its_analytic_modes() {
         assert!(err < 0.004, "mode {m}{nn}{p}: {peak:.4e} vs {fa:.4e} ({:.3}%)", err * 100.0);
     }
 }
+
+fn stages_of(run: impl FnOnce()) -> Vec<String> {
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let into = seen.clone();
+    let listening = sims_progress::listen(move |r| into.lock().unwrap().push(r.stage.clone()));
+    run();
+    drop(listening);
+    seen.lock().unwrap().clone()
+}
+
+#[test]
+fn a_run_reports_its_time_steps() {
+    let sim = everything();
+    let pulse = Pulse { f0: 5e9, fc: 5e9 };
+    let stages = stages_of(|| {
+        fdtd::run_cpu(&sim, 0, &pulse, &extras(&sim, 200, false), &mut |_, _| true).unwrap();
+    });
+    assert!(stages.iter().any(|s| s == "FDTD time steps"), "{stages:?}");
+}

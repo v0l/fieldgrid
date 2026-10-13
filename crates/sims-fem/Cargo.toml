@@ -14,3 +14,6 @@ faer = { workspace = true, features = ["sparse-linalg"] }
 rayon.workspace = true
 sims-progress.workspace = true
 sims-tet.workspace = true
+
+[dev-dependencies]
+sims-progress.workspace = true
