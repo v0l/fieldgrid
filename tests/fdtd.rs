@@ -206,7 +206,7 @@ fn an_empty_cavity_rings_at_its_analytic_modes() {
     let extras = Extras { max_steps: 40_000, decay_db: f64::INFINITY, ..Default::default() };
     let rec =
         fdtd::run_cpu(&sim, 0, &Pulse { f0: 3.0e9, fc: 2.5e9 }, &extras, &mut |_, _| true).unwrap();
-    let v: Vec<f64> = rec.series.chunks_exact(2).map(|p| p[0] as f64).collect();
+    let v: Vec<f64> = rec.series.as_chunks::<2>().0.iter().map(|p| p[0] as f64).collect();
     let spectrum = |f: f64| {
         let w = 2.0 * std::f64::consts::PI * f * sim.dt;
         let (mut re, mut im) = (0.0, 0.0);

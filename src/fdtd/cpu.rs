@@ -287,11 +287,11 @@ impl State<'_> {
         let dt = self.sim.dt as f32;
         let t = (n as f32 + 0.5) * dt;
         let pulse = self.pulse(t);
-        for q in self.p.source.chunks_exact(3) {
+        for q in self.p.source.as_chunks::<3>().0 {
             let (id, src, comp) = (q[0] as usize, q[1], q[2] as usize);
             self.e[comp * nn + id] -= src * pulse;
         }
-        for q in self.inductor.chunks_exact_mut(5) {
+        for q in self.inductor.as_chunks_mut::<5>().0 {
             let f = q[0] as usize * nn + q[1] as usize;
             let x = self.e[f] - q[2] * q[4];
             self.e[f] = x;
