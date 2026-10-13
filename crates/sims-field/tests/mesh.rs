@@ -1,6 +1,6 @@
-use fieldgrid::Bvh;
-use fieldgrid::grid::{Grid, uniform};
-use fieldgrid::raster::{Triangle, closed, sheet_edges, solid_cells, solid_edges};
+use sims_field::Bvh;
+use sims_field::grid::{Grid, uniform};
+use sims_field::raster::{Triangle, closed, sheet_edges, solid_cells, solid_edges};
 
 fn quad(a: [f64; 3], b: [f64; 3], c: [f64; 3], d: [f64; 3]) -> [Triangle; 2] {
     [[a, b, c], [a, c, d]]

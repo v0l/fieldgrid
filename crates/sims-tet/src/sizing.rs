@@ -1,6 +1,6 @@
 use crate::fixed::HashMap;
 use crate::geom::*;
-use fieldgrid::Bvh;
+use sims_field::Bvh;
 
 pub struct SizeField {
     pub top: f64,

@@ -10,6 +10,6 @@ description = "Delaunay tetrahedral meshing of closed surface meshes, with quali
 [dependencies]
 anyhow.workspace = true
 cgmath.workspace = true
-fieldgrid.workspace = true
+sims-field.workspace = true
 rayon.workspace = true
 robust = "1.2"

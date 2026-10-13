@@ -1,5 +1,5 @@
-use fieldgrid::raster::{closed, solid_cells};
-use fieldgrid::{Bvh, Grid};
+use sims_field::raster::{closed, solid_cells};
+use sims_field::{Bvh, Grid};
 
 fn main() {
     let p = |x: f64, y: f64, z: f64| [x, y, z];

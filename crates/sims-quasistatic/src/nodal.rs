@@ -1,6 +1,6 @@
 #[cfg(not(target_arch = "wasm32"))]
 use bytemuck::{Pod, Zeroable};
-use fieldgrid::Gpu;
+use sims_field::Gpu;
 
 pub struct Problem {
     pub n: [usize; 3],

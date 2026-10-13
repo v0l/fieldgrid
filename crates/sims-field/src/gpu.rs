@@ -24,7 +24,7 @@ pub struct Options {
 impl Default for Options {
     fn default() -> Self {
         Options {
-            label: "fieldgrid",
+            label: "sims-field",
             backends: wgpu::Backends::PRIMARY,
             software: Software::Refuse,
             storage_buffers: 8,

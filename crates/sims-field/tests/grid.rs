@@ -1,5 +1,5 @@
-use fieldgrid::Grid;
-use fieldgrid::grid::{Grading, cell_of, centres, graded, nearest, pad, smooth, uniform};
+use sims_field::Grid;
+use sims_field::grid::{Grading, cell_of, centres, graded, nearest, pad, smooth, uniform};
 
 #[test]
 fn nearest_picks_the_closer_line_and_clamps_at_the_ends() {

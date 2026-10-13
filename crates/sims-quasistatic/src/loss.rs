@@ -1,6 +1,6 @@
 use crate::xsection::{self, Grid, Resolution, Stack, Trace};
-use fieldgrid::Gpu;
 use serde::Serialize;
+use sims_field::Gpu;
 use sims_rf::network::Cx;
 use std::f64::consts::PI;
 

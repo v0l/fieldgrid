@@ -1,6 +1,6 @@
-use fieldgrid::Gpu;
-use fieldgrid::grid::{Grading, graded};
 use serde::Serialize;
+use sims_field::Gpu;
+use sims_field::grid::{Grading, graded};
 
 pub const ETA0: f64 = 376.730_313_668;
 

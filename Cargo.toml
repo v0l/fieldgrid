@@ -10,7 +10,7 @@ license = "MIT"
 repository = "https://github.com/v0l/sims"
 
 [workspace.dependencies]
-fieldgrid = { path = "crates/fieldgrid" }
+sims-field = { path = "crates/sims-field" }
 sims-rf = { path = "crates/sims-rf" }
 sims-circuit = { path = "crates/sims-circuit" }
 sims-quasistatic = { path = "crates/sims-quasistatic" }

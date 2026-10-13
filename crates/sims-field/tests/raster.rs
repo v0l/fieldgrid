@@ -1,6 +1,6 @@
-use fieldgrid::Bvh;
-use fieldgrid::grid::{Grading, centres, graded, uniform};
-use fieldgrid::raster::fill;
+use sims_field::Bvh;
+use sims_field::grid::{Grading, centres, graded, uniform};
+use sims_field::raster::fill;
 
 fn cuboid(lo: [f64; 3], hi: [f64; 3]) -> Bvh {
     let p = |i: usize| [0, 1, 2].map(|a| if i >> a & 1 == 1 { hi[a] } else { lo[a] });

@@ -7,7 +7,7 @@ is its own crate, so an app pulls in only what it uses.
 
 | crate | what it solves |
 |---|---|
-| `fieldgrid` | Rectilinear grids, triangle BVH, mesh rasterising, a wgpu compute harness, and a Yee-grid FDTD engine with CPML, lumped ports, Debye loss and near-to-far-field |
+| `sims-field` | Rectilinear grids, triangle BVH, mesh rasterising, a wgpu compute harness, and a Yee-grid FDTD engine with CPML, lumped ports, Debye loss and near-to-far-field |
 | `sims-fem` | Quadratic tetrahedral finite elements: elastic statics with contact, friction and bonded parts, heat conduction, modal (LOBPCG) and buckling analysis |
 | `sims-tet` | Delaunay tetrahedral meshing of a closed surface mesh: boundary recovery, quality refinement, sliver removal, flips and smoothing |
 | `sims-circuit` | A SPICE-style circuit simulator: operating point, AC sweep, transient and noise, with diodes, BJTs, MOSFETs, op-amps and LDOs |
@@ -19,7 +19,7 @@ Pin a revision from git. A crate is found by name:
 
 ```toml
 sims-fem = { git = "https://github.com/v0l/sims", rev = "..." }
-fieldgrid = { git = "https://github.com/v0l/sims", rev = "..." }
+sims-field = { git = "https://github.com/v0l/sims", rev = "..." }
 ```
 
 ## Using the mesher and FEM
@@ -39,8 +39,8 @@ checks the stretch against FL/AE.
 
 ## GPUs
 
-GPU solvers take an `Option<&fieldgrid::Gpu>` and fall back to the CPU without one. Open a
-device once with `fieldgrid::Gpu::open_blocking` and pass it to each. In the browser the
+GPU solvers take an `Option<&sims_field::Gpu>` and fall back to the CPU without one. Open a
+device once with `sims_field::Gpu::open_blocking` and pass it to each. In the browser the
 blocking readbacks are not available, so `sims-quasistatic` runs on the CPU there.
 
 ## Progress
@@ -51,7 +51,7 @@ blocking readbacks are not available, so `sims-quasistatic` runs on the CPU ther
 ## Tests
 
 `cargo test --workspace` runs everything. Tests that need a GPU skip when no adapter opens; with
-`--all-features` the `fieldgrid` ones fail instead. CI runs them on Mesa's software Vulkan
+`--all-features` the `sims-field` ones fail instead. CI runs them on Mesa's software Vulkan
 driver:
 
 ```

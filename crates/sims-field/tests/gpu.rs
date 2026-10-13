@@ -1,6 +1,6 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use fieldgrid::gpu::{Gpu, Options, Software};
+use sims_field::gpu::{Gpu, Options, Software};
 
 const DOUBLE: &str = "
 @group(0) @binding(0) var<storage, read_write> data: array<f32>;

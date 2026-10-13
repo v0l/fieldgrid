@@ -1,11 +1,11 @@
 #![cfg(not(target_arch = "wasm32"))]
 
-use fieldgrid::Gpu;
-use fieldgrid::fdtd::{
+use sims_field::Gpu;
+use sims_field::fdtd::{
     self, C0, Debye, Edge, Element, Extras, Grid, Lumped, Materials, Media, PortDef, Pulse, Record,
     Resistive, Sheets, Sim, idx,
 };
-use fieldgrid::gpu::{Options, Software};
+use sims_field::gpu::{Options, Software};
 use std::sync::Mutex;
 
 static DEVICE: Mutex<()> = Mutex::new(());

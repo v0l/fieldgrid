@@ -8,7 +8,7 @@ repository.workspace = true
 description = "Quasi-static solvers: 2D transmission-line cross-sections, conductor and dielectric loss, 3D DC conduction grids"
 
 [dependencies]
-fieldgrid.workspace = true
+sims-field.workspace = true
 sims-rf.workspace = true
 serde.workspace = true
 bytemuck = { workspace = true, features = ["derive"] }
