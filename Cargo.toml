@@ -1,19 +1,19 @@
-[package]
-name = "fieldgrid"
+[workspace]
+resolver = "3"
+members = ["crates/*"]
+
+[workspace.package]
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.92"
 license = "MIT"
-description = "Rectilinear grids, mesh rasterising and a wgpu compute harness for field solvers"
-repository = "https://github.com/v0l/fieldgrid"
+repository = "https://github.com/v0l/sims"
 
-[dependencies]
+[workspace.dependencies]
+fieldgrid = { path = "crates/fieldgrid" }
 bytemuck = "1.25"
 rayon = "1.11"
 wgpu = "29"
-
-[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 pollster = "0.4"
-
-[features]
-gpu-tests = []
+faer = { version = "0.24", default-features = false, features = ["std", "linalg"] }
+num-complex = "0.4"

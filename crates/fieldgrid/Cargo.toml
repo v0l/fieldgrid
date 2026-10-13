@@ -1,0 +1,19 @@
+[package]
+name = "fieldgrid"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Rectilinear grids, mesh rasterising, a wgpu compute harness and an FDTD engine for field solvers"
+
+[dependencies]
+bytemuck.workspace = true
+rayon.workspace = true
+wgpu.workspace = true
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+pollster.workspace = true
+
+[features]
+gpu-tests = []
