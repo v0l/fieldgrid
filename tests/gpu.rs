@@ -44,13 +44,13 @@ fn a_kernel_runs_and_reads_back() {
     let out: Vec<f32> = gpu.take_now(gpu.fetch(encoder, &buffer, 0..4000)).unwrap();
     assert_eq!(out, input.iter().map(|x| x * 2.0).collect::<Vec<_>>());
 
-    let tail: Vec<f32> = gpu.read(&buffer, 3960..4000).unwrap();
+    let tail: Vec<f32> = gpu.read(&buffer, 990..1000).unwrap();
     assert_eq!(tail, (990..1000).map(|i| 2.0 * i as f32).collect::<Vec<_>>());
 
     let encoder = gpu.device.create_command_encoder(&Default::default());
     let before: Vec<f32> = gpu.take_now(gpu.fetch_cleared(encoder, &buffer)).unwrap();
     assert_eq!(before[999], 1998.0);
-    let after: Vec<f32> = gpu.read(&buffer, 0..buffer.size()).unwrap();
+    let after: Vec<f32> = gpu.read_all(&buffer).unwrap();
     assert!(after.iter().all(|x| *x == 0.0));
 }
 

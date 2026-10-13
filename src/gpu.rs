@@ -243,10 +243,16 @@ impl Gpu {
     pub async fn read_async<T: bytemuck::Pod>(
         &self,
         buffer: &wgpu::Buffer,
-        bytes: Range<u64>,
+        elements: Range<usize>,
     ) -> Result<Vec<T>, String> {
+        let size = std::mem::size_of::<T>() as u64;
+        let bytes = elements.start as u64 * size..elements.end as u64 * size;
         let encoder = self.device.create_command_encoder(&Default::default());
         self.take(self.fetch(encoder, buffer, bytes)).await
+    }
+
+    pub fn length<T>(buffer: &wgpu::Buffer) -> usize {
+        (buffer.size() / std::mem::size_of::<T>() as u64) as usize
     }
 
     #[cfg(not(target_arch = "wasm32"))]
@@ -258,9 +264,14 @@ impl Gpu {
     pub fn read<T: bytemuck::Pod>(
         &self,
         buffer: &wgpu::Buffer,
-        bytes: Range<u64>,
+        elements: Range<usize>,
     ) -> Result<Vec<T>, String> {
-        pollster::block_on(self.read_async(buffer, bytes))
+        pollster::block_on(self.read_async(buffer, elements))
+    }
+
+    #[cfg(not(target_arch = "wasm32"))]
+    pub fn read_all<T: bytemuck::Pod>(&self, buffer: &wgpu::Buffer) -> Result<Vec<T>, String> {
+        self.read(buffer, 0..Gpu::length::<T>(buffer))
     }
 
     #[cfg(not(target_arch = "wasm32"))]
