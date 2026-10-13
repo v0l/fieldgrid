@@ -1,0 +1,16 @@
+[package]
+name = "sims-quasistatic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Quasi-static solvers: 2D transmission-line cross-sections, conductor and dielectric loss, 3D DC conduction grids"
+
+[dependencies]
+fieldgrid.workspace = true
+sims-rf.workspace = true
+serde.workspace = true
+bytemuck = { workspace = true, features = ["derive"] }
+wgpu.workspace = true
+faer = { workspace = true, features = ["sparse-linalg"] }

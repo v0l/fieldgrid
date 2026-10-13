@@ -1,0 +1,11 @@
+[package]
+name = "sims-rf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Complex S-parameter networks: Touchstone, joins, noise, stability, step and TDR responses"
+
+[dependencies]
+serde.workspace = true

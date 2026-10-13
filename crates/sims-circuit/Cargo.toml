@@ -1,0 +1,12 @@
+[package]
+name = "sims-circuit"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "A SPICE-style circuit simulator: operating point, AC, transient and noise on a sparse MNA system"
+
+[dependencies]
+serde.workspace = true
+faer = { workspace = true, features = ["sparse-linalg"] }
