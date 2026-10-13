@@ -1,4 +1,5 @@
 pub mod bvh;
+pub mod fdtd;
 pub mod gpu;
 pub mod grid;
 pub mod raster;
