@@ -11,6 +11,8 @@ pub use fixed::{HashMap, HashSet};
 pub use geom::*;
 pub use surface::{SurfaceMesh, Welder};
 
+type Found = Vec<(usize, Vector2)>;
+
 pub struct TetMesh<S = ()> {
     pub nodes: Vec<Point3>,
     pub tets: Vec<[u32; 4]>,
@@ -799,7 +801,7 @@ impl<S: Surface> TetMesh<S> {
                         .fold(0.0, f64::max);
                     (off < reach * 1.0e-3).then_some((p, found))
                 };
-                let mut best: Option<(f64, Point3, Vec<(usize, Vector2)>)> = None;
+                let mut best: Option<(f64, Point3, Found)> = None;
                 for w in [1.0, 0.5, 0.25, 0.125] {
                     let Some((at, found)) = place(home + (Point3::from_vec(centre) - home) * w)
                     else {
