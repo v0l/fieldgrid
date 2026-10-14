@@ -41,11 +41,21 @@ thread's listener and parent stage follow the work.
 - Steady finite-volume RANS on the same grid, as a second answer. (`docs/flow.md`)
 - f16 throughput is 79% of FluidX3D's; `precision half` is unchecked on the rotator.
   (`docs/flow.md`)
+- A benchmark in curved space: the only curved check is the straight round pipe
+  (`pipe_flow_with_curved_walls`, Poiseuille within 0.15%). Add a pipe bend: laminar flow
+  through a 90° bend against the LDA profiles of Bovendeerd et al. (JFM 1987, Dean number
+  about 286), and a coiled or toroidal pipe whose friction factor rises over the straight pipe's
+  as White's (1929) correlation in the Dean number says. Both test how the walls between cells
+  carry the secondary (Dean) vortices.
 
 ## sims-fem
 
 - The static solve runs on the CPU only; a GPU solve waits on a multigrid preconditioner.
   (`gcad/docs/simulation.md`, phase 3)
+- Simulate springs: a helical compression or extension spring meshed as a solid should
+  give the rate k = G d⁴ / (8 D³ n) and, at large deflection, the stress with the Wahl factor;
+  check both, then decide whether coils need a beam element instead of a tet mesh (a fine wire
+  coil is many elements across its length for a few across its section).
 
 ## sims-magnetic
 
