@@ -110,6 +110,84 @@ impl Window {
     }
 }
 
+impl Window {
+    pub fn harmonics(&self, mains: f64, upto: usize) -> Option<Vec<f64>> {
+        let end = self.ts[self.ts.len() - 1];
+        let periods = (self.span() * mains * (1.0 + 1e-9)).floor();
+        if periods < 1.0 {
+            return None;
+        }
+        let start = end - periods / mains;
+        let n = (periods as usize * 1024).clamp(4096, 1 << 20);
+        let at = |t: f64| {
+            let k = self.ts.partition_point(|&x| x < t).clamp(1, self.ts.len() - 1);
+            let span = self.ts[k] - self.ts[k - 1];
+            let u = if span > 0.0 { ((t - self.ts[k - 1]) / span).clamp(0.0, 1.0) } else { 0.0 };
+            self.ys[k - 1] + (self.ys[k] - self.ys[k - 1]) * u
+        };
+        let samples: Vec<f64> =
+            (0..n).map(|i| at(start + (end - start) * i as f64 / n as f64)).collect();
+        Some(
+            (1..=upto)
+                .map(|h| {
+                    let w = std::f64::consts::TAU * h as f64 * periods / n as f64;
+                    let (re, im) =
+                        samples.iter().enumerate().fold((0.0, 0.0), |(re, im), (i, y)| {
+                            let p = w * i as f64;
+                            (re + y * p.cos(), im - y * p.sin())
+                        });
+                    std::f64::consts::SQRT_2 * re.hypot(im) / n as f64
+                })
+                .collect(),
+        )
+    }
+}
+
+pub const RECEIVER_BANDWIDTH: f64 = 9e3;
+
+impl Window {
+    pub fn emission(&self) -> Option<(Vec<f64>, Vec<f64>)> {
+        let (a, b) = (self.ts[0], self.ts[self.ts.len() - 1]);
+        if (b - a) * RECEIVER_BANDWIDTH < 2.0 {
+            return None;
+        }
+        let n = (((b - a) * 75e6).ceil() as usize).next_power_of_two().clamp(1 << 12, 1 << 23);
+        let m = self.mean();
+        let mut re: Vec<f64> = (0..n)
+            .map(|i| {
+                let t = a + (b - a) * i as f64 / n as f64;
+                let k = self.ts.partition_point(|&x| x < t).clamp(1, self.ts.len() - 1);
+                let span = self.ts[k] - self.ts[k - 1];
+                let u =
+                    if span > 0.0 { ((t - self.ts[k - 1]) / span).clamp(0.0, 1.0) } else { 0.0 };
+                let y = self.ys[k - 1] + (self.ys[k] - self.ys[k - 1]) * u - m;
+                y * (0.5 - 0.5 * (std::f64::consts::TAU * i as f64 / n as f64).cos())
+            })
+            .collect();
+        let mut im = vec![0.0; n];
+        fft(&mut re, &mut im);
+        let df = 1.0 / (b - a);
+        let mut total = vec![0.0; n / 2 + 1];
+        for k in 1..n / 2 {
+            let rms = 2.0 * std::f64::consts::SQRT_2 * re[k].hypot(im[k]) / n as f64;
+            total[k + 1] = total[k] + rms * rms / 1.5;
+        }
+        let top = (n / 2) as f64 * df;
+        let mut freqs = Vec::new();
+        let mut dbuv = Vec::new();
+        let mut f = 150e3;
+        while f <= top.min(30e6) {
+            let lo = ((f - RECEIVER_BANDWIDTH / 2.0) / df).ceil().max(1.0) as usize;
+            let hi = (((f + RECEIVER_BANDWIDTH / 2.0) / df).floor() as usize).min(n / 2 - 1);
+            let power = if hi >= lo { total[hi + 1] - total[lo] } else { 0.0 };
+            freqs.push(f);
+            dbuv.push(10.0 * power.max(1e-30).log10() + 120.0);
+            f += RECEIVER_BANDWIDTH / 2.0;
+        }
+        Some((freqs, dbuv))
+    }
+}
+
 pub fn spectrum(ts: &[f64], ys: &[f64], from: f64, n: usize) -> Option<(Vec<f64>, Vec<f64>)> {
     let w = Window::new(ts, ys, from, f64::INFINITY)?;
     let n = n.next_power_of_two().max(64);

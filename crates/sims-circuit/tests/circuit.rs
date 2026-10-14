@@ -185,3 +185,114 @@ fn a_follower_tracks_inside_its_rails_and_clips_at_them() {
         assert!((out - want).abs() < 0.02, "{input} V in, {out} V out");
     }
 }
+
+fn mains_with_third(third_rms: f64, class_b: bool) -> CircuitSpec {
+    let sine = |amplitude: f64, frequency: f64| Wave::Sine {
+        offset: 0.0,
+        amplitude,
+        frequency,
+        delay: 0.0,
+    };
+    let drive = |net: &str, p: usize, n: Option<usize>, wave: Wave| Drive {
+        net: net.into(),
+        p: Some(p),
+        n,
+        current: false,
+        dc: 0.0,
+        ac: 0.0,
+        r: 0.0,
+        wave,
+    };
+    CircuitSpec {
+        schematic: "mains".into(),
+        nets: vec!["mid".into(), "top".into()],
+        elements: vec![element("R1", ElemKind::Resistor { r: 1.0 }, Some(1), None)],
+        drives: vec![
+            drive("mid", 0, None, sine(325.0, 50.0)),
+            drive("top", 1, Some(0), sine(third_rms * std::f64::consts::SQRT_2, 150.0)),
+        ],
+        ac: None,
+        tran: Some((0.1, 20e-6)),
+        noise: None,
+        checks: vec![sims_circuit::Check {
+            label: "harmonics(R1)".into(),
+            measure: sims_circuit::Measure::Harmonics { element: 0, mains: 50.0, class_b },
+            at: sims_circuit::At::Window(0.02, 0.1),
+            min: None,
+            max: Some(100.0),
+        }],
+        record: vec![1],
+        temperature: 27.0,
+        netlist_hash: 0,
+    }
+}
+
+#[test]
+fn harmonic_currents_read_against_the_class_a_and_b_limits() {
+    let a = run(&mains_with_third(1.15, false), "a", 0);
+    assert!(a.failures.is_empty(), "{:?}", a.failures);
+    assert!((a.checks[0].value - 50.0).abs() < 0.5, "{:?}", a.checks[0]);
+    let rms = &a.harmonics[0].values;
+    assert!((rms[0] - 325.0 / std::f64::consts::SQRT_2).abs() < 0.5, "fundamental {}", rms[0]);
+    assert!(rms[1].abs() < 0.01 && rms[4].abs() < 0.01, "{:?}", &rms[..6]);
+    let b = run(&mains_with_third(1.15, true), "b", 0);
+    assert!((b.checks[0].value - 100.0 / 3.0).abs() < 0.5, "{:?}", b.checks[0]);
+    let over = run(&mains_with_third(3.0, false), "over", 0);
+    assert!(!over.passed && over.checks[0].value > 100.0, "{:?}", over.checks[0]);
+}
+
+fn line(frequency: f64, dbuv: f64, average: bool) -> CircuitSpec {
+    let rms = 1e-6 * 10f64.powf(dbuv / 20.0);
+    let wave = Wave::Sine {
+        offset: 0.0,
+        amplitude: rms * std::f64::consts::SQRT_2,
+        frequency,
+        delay: 0.0,
+    };
+    CircuitSpec {
+        schematic: "lisn".into(),
+        nets: vec!["port".into()],
+        elements: vec![element("R50", ElemKind::Resistor { r: 50.0 }, Some(0), None)],
+        drives: vec![Drive {
+            net: "port".into(),
+            p: Some(0),
+            n: None,
+            current: false,
+            dc: 0.0,
+            ac: 0.0,
+            r: 0.0,
+            wave,
+        }],
+        ac: None,
+        tran: Some((500e-6, 10e-9)),
+        noise: None,
+        checks: vec![sims_circuit::Check {
+            label: "emission(port)".into(),
+            measure: sims_circuit::Measure::Emission { node: Some(0), class_a: false, average },
+            at: sims_circuit::At::Window(0.0, 500e-6),
+            min: None,
+            max: Some(0.0),
+        }],
+        record: vec![0],
+        temperature: 27.0,
+        netlist_hash: 0,
+    }
+}
+
+#[test]
+fn a_line_reads_its_level_against_the_cispr_11_class_b_limits() {
+    let one = run(&line(1e6, 60.0, false), "1MHz", 0);
+    assert!(!one.passed && one.emission_freqs.len() > 6000, "{}", one.emission_freqs.len());
+    assert!((one.checks[0].value - 4.0).abs() < 0.3, "{:?}", one.checks[0]);
+    let average = run(&line(1e6, 60.0, true), "1MHz average", 0);
+    assert!((average.checks[0].value - 14.0).abs() < 0.3, "{:?}", average.checks[0]);
+    let low = run(&line(200e3, 70.0, false), "200kHz", 0);
+    let limit = 66.0 - 10.0 * (200f64 / 150.0).log10() / (500f64 / 150.0).log10();
+    assert!(
+        (low.checks[0].value - (70.0 - limit)).abs() < 0.3,
+        "{:?} against {limit}",
+        low.checks[0]
+    );
+    let quiet = run(&line(1e6, 40.0, false), "quiet", 0);
+    assert!(quiet.passed, "{:?}", quiet.checks[0]);
+}

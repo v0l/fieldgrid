@@ -1252,6 +1252,40 @@ pub fn run(spec: &CircuitSpec, name: &str, hash: u64) -> CircuitResult {
                     _ => w.thd(),
                 })
             }
+            (Measure::Harmonics { element, mains, class_b }, At::Window(a, b)) => {
+                let ys: Vec<f64> = tran_x
+                    .iter()
+                    .zip(&tran_states)
+                    .map(|(x, s)| net.element_current(spec, *element, x, Some(s)).unwrap_or(0.0))
+                    .collect();
+                let scale = if *class_b { 1.5 } else { 1.0 };
+                crate::wave::Window::new(&tran_times, &ys, a, b)
+                    .and_then(|w| w.harmonics(*mains, 40))
+                    .map(|rms| {
+                        res.harmonics.push(Curve { name: c.label.clone(), values: rms.clone() });
+                        (2..=40)
+                            .filter_map(|h| crate::class_a(h).map(|l| rms[h - 1] / (l * scale)))
+                            .fold(0.0, f64::max)
+                            * 100.0
+                    })
+            }
+            (Measure::Emission { node, class_a, average }, At::Window(a, b)) => {
+                let ys: Vec<f64> = tran_x.iter().map(|x| v(x, *node)).collect();
+                crate::wave::Window::new(&tran_times, &ys, a, b).and_then(|w| w.emission()).map(
+                    |(freqs, dbuv)| {
+                        let worst = freqs
+                            .iter()
+                            .zip(&dbuv)
+                            .filter_map(|(&f, &d)| {
+                                crate::cispr11(f, *class_a, *average).map(|l| d - l)
+                            })
+                            .fold(f64::MIN, f64::max);
+                        res.emission_freqs = freqs;
+                        res.emission.push(Curve { name: c.label.clone(), values: dbuv });
+                        worst
+                    },
+                )
+            }
             _ => None,
         };
         let unit = match (&c.measure, c.at) {
@@ -1262,10 +1296,15 @@ pub fn run(spec: &CircuitSpec, name: &str, hash: u64) -> CircuitResult {
             (Measure::Noise(_), _) => "V/rtHz",
             (Measure::Freq(_), _) => "Hz",
             (Measure::Thd(_), _) => "%",
+            (Measure::Harmonics { .. }, _) => "% of limit",
+            (Measure::Emission { .. }, _) => "dB over limit",
         };
         let Some(value) = value else {
             let why = match c.measure {
-                Measure::Freq(_) | Measure::Thd(_) => "fewer than one full period in the span",
+                Measure::Freq(_) | Measure::Thd(_) | Measure::Harmonics { .. } => {
+                    "fewer than one full period in the span"
+                }
+                Measure::Emission { .. } => "a span shorter than two receiver bandwidths (222 us)",
                 _ => "outside the analysed range",
             };
             res.failures.push(format!("{}: {why}", c.label));

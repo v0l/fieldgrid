@@ -65,9 +65,8 @@ the same rule.
 
 ## sims-circuit
 
-- No conducted-emission readout (a LISN and dBuV from 150 kHz to 30 MHz against CISPR 11),
-  no harmonic readout against EN 61000-3-2 class A, and no Pst flicker readout
-  (EN 61000-3-3). (agentee TODO)
+- No Pst flicker readout (EN 61000-3-3): it needs the IEC 61000-4-15 flickermeter on the
+  supply voltage over minutes of transient. (agentee TODO)
 
 ## sims-field
 

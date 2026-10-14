@@ -316,6 +316,8 @@ pub enum Measure {
     Rms(Node),
     Freq(Node),
     Thd(Node),
+    Harmonics { element: usize, mains: f64, class_b: bool },
+    Emission { node: Node, class_a: bool, average: bool },
 }
 
 impl Measure {
@@ -327,6 +329,8 @@ impl Measure {
                 | Measure::Rms(_)
                 | Measure::Freq(_)
                 | Measure::Thd(_)
+                | Measure::Harmonics { .. }
+                | Measure::Emission { .. }
         )
     }
 }
@@ -408,6 +412,12 @@ pub struct CircuitResult {
     pub noise: Vec<Curve>,
     #[serde(default, skip_serializing_if = "Option::is_none")]
     pub noise_rms: Option<f64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub harmonics: Vec<Curve>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub emission_freqs: Vec<f64>,
+    #[serde(default, skip_serializing_if = "Vec::is_empty")]
+    pub emission: Vec<Curve>,
     pub checks: Vec<Reading>,
     pub failures: Vec<String>,
     pub passed: bool,
@@ -441,4 +451,42 @@ pub fn fmt_si(v: f64, unit: &str) -> String {
     let s = format!("{x:.4}");
     let s = s.trim_end_matches('0').trim_end_matches('.');
     format!("{s}{p}{unit}")
+}
+
+pub fn class_a(order: usize) -> Option<f64> {
+    let n = order as f64;
+    match order {
+        2 => Some(1.08),
+        3 => Some(2.30),
+        4 => Some(0.43),
+        5 => Some(1.14),
+        6 => Some(0.30),
+        7 => Some(0.77),
+        9 => Some(0.40),
+        11 => Some(0.33),
+        13 => Some(0.21),
+        8..=40 if order.is_multiple_of(2) => Some(0.23 * 8.0 / n),
+        15..=39 => Some(0.15 * 15.0 / n),
+        _ => None,
+    }
+}
+
+pub fn cispr11(f: f64, class_a: bool, average: bool) -> Option<f64> {
+    if !(150e3..=30e6).contains(&f) {
+        return None;
+    }
+    let low =
+        |from: f64, to: f64| from + (to - from) * (f / 150e3).log10() / (0.5f64 / 0.15).log10();
+    Some(match (class_a, average) {
+        (true, false) if f < 500e3 => 79.0,
+        (true, false) => 73.0,
+        (true, true) if f < 500e3 => 66.0,
+        (true, true) => 60.0,
+        (false, false) if f < 500e3 => low(66.0, 56.0),
+        (false, false) if f <= 5e6 => 56.0,
+        (false, false) => 60.0,
+        (false, true) if f < 500e3 => low(56.0, 46.0),
+        (false, true) if f <= 5e6 => 46.0,
+        (false, true) => 50.0,
+    })
 }
