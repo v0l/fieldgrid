@@ -1,6 +1,8 @@
 pub mod aggregate;
 pub mod buckling;
 pub mod elastic;
+#[cfg(not(target_arch = "wasm32"))]
+pub mod gpu;
 pub mod lobpcg;
 pub mod modal;
 pub mod scalar;

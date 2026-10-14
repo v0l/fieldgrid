@@ -110,6 +110,7 @@ pub struct Problem<'a> {
     pub body_force: Option<Vec<Vector3>>,
     pub expansion: Option<Vec<f64>>,
     pub wind: Option<&'a SurfacePressure>,
+    pub gpu: Option<&'a sims_field::Gpu>,
 }
 
 pub struct Answer {
@@ -724,7 +725,7 @@ pub fn solve(problem: &Problem) -> Result<Answer> {
         });
         let mut tangent = stiffness.clone();
         add_contacts(&mut tangent, mesh, penalty, &touches);
-        let step = Factored::new(&tangent, &projectors, &coarse, largest)
+        let step = Factored::new(&tangent, &projectors, &coarse, largest, problem.gpu)
             .map(|solver| solver.solve(&r))
             .ok()
             .filter(|step| step.residual <= 1.0e-6);

@@ -1,6 +1,6 @@
 use sims_fem::Quadratic;
 use sims_fem::elastic::{Hold, Load, Problem, Push, Support, solve};
-use sims_tet::{HashMap, Point3, SurfaceMesh, Vector3, fill};
+use sims_tet::{HashMap, InnerSpace, Point3, SurfaceMesh, Vector3, fill};
 
 const LENGTH: f64 = 100.0;
 const SIDE: f64 = 10.0;
@@ -77,6 +77,7 @@ fn a_bar_in_tension_stretches_by_fl_over_ae() {
         body_force: None,
         expansion: None,
         wind: None,
+        gpu: None,
     })
     .expect("solves");
     let tip: Vec<f64> = mesh
@@ -119,6 +120,7 @@ fn meshing_and_solving_report_progress() {
             body_force: None,
             expansion: None,
             wind: None,
+            gpu: None,
         })
         .expect("solves");
     });
@@ -141,4 +143,104 @@ fn bars_bond_across_a_small_gap_unless_kept_apart() {
     assert!(bonded_nodes(0.2, &[]) > 50);
     assert_eq!(bonded_nodes(0.2, &[(0, 1)]), 0);
     assert_eq!(bonded_nodes(0.4, &[]), 0);
+}
+
+fn bend(
+    cell: f64,
+    gpu: Option<&sims_field::Gpu>,
+) -> (Vec<Vector3>, usize, f64, std::time::Duration) {
+    let mesh = Quadratic::from(&fill(bar(cell), cell).expect("meshes"));
+    let started = std::time::Instant::now();
+    let answer = solve(&Problem {
+        mesh: &mesh,
+        materials: &[(200e3, 0.3)],
+        supports: &[Support { label: "end".into(), faces: vec![0], hold: Hold::Fixed }],
+        loads: &[Load {
+            label: "bend".into(),
+            faces: vec![1],
+            push: Push::Force(Vector3::new(0.0, 100.0, 40.0)),
+        }],
+        body_force: None,
+        expansion: None,
+        wind: None,
+        gpu,
+    })
+    .expect("solves");
+    (answer.displacement, answer.iterations, answer.residual, started.elapsed())
+}
+
+#[test]
+fn the_gpu_solve_matches_the_cpu_solve() {
+    let Ok(gpu) = sims_fem::gpu::open(sims_field::gpu::Software::Allow) else {
+        eprintln!("no GPU with 64-bit floats; nothing to compare");
+        return;
+    };
+    let cell = std::env::var("BAR_CELL").ok().and_then(|v| v.parse().ok()).unwrap_or(1.6);
+    let _l = std::env::var("BAR_STAGES").is_ok().then(|| {
+        sims_progress::listen(|r| {
+            if r.finished {
+                eprintln!("  {} {:.2?}", r.stage, r.elapsed)
+            }
+        })
+    });
+    let (cpu, cpu_iterations, _, cpu_time) = bend(cell, None);
+    let (on_gpu, gpu_iterations, residual, gpu_time) = bend(cell, Some(&gpu));
+    eprintln!(
+        "{} nodes: cpu {cpu_iterations} iterations {cpu_time:.2?}, {} {gpu_iterations} iterations {gpu_time:.2?}",
+        cpu.len(),
+        gpu.name
+    );
+    assert!(residual < 1e-10, "{residual}");
+    assert!(cpu.len() * 3 > 100_000, "the bar is small enough for the direct solver");
+    let peak = cpu.iter().map(|d| d.magnitude()).fold(0.0, f64::max);
+    let worst = cpu.iter().zip(&on_gpu).map(|(a, b)| (a - b).magnitude()).fold(0.0, f64::max);
+    assert!(worst < 1e-8 * peak, "{worst} against {peak}");
+    assert!(
+        gpu_iterations.abs_diff(cpu_iterations) <= 2,
+        "{gpu_iterations} against {cpu_iterations}"
+    );
+}
+
+#[test]
+fn split_stiffness_on_the_gpu_solves_as_one_piece() {
+    use sims_fem::solve::{TwoLevel, two_level};
+    let Ok(gpu) = sims_fem::gpu::open(sims_field::gpu::Software::Allow) else {
+        eprintln!("no GPU with 64-bit floats; nothing to compare");
+        return;
+    };
+    let mesh = Quadratic::from(&fill(bar(1.6), 1.6).expect("meshes"));
+    let supports = [Support { label: "end".into(), faces: vec![0], hold: Hold::Fixed }];
+    let loads = [Load {
+        label: "bend".into(),
+        faces: vec![1],
+        push: Push::Force(Vector3::new(0.0, 100.0, 40.0)),
+    }];
+    let problem = Problem {
+        mesh: &mesh,
+        materials: &[(200e3, 0.3)],
+        supports: &supports,
+        loads: &loads,
+        body_force: None,
+        expansion: None,
+        wind: None,
+        gpu: None,
+    };
+    let a = sims_fem::elastic::assemble(&mesh, problem.materials).unwrap();
+    let (projectors, _) = sims_fem::elastic::projectors(&mesh, &supports);
+    let b = sims_fem::elastic::loads(&problem).unwrap();
+    let coarse = mesh.coarse();
+    let cpu = two_level(&a, &b, &projectors, &coarse, 1e-10, 3000).unwrap();
+    let level = TwoLevel::new(&a, &projectors, &coarse).unwrap();
+    let solver = sims_fem::gpu::Solver::with_partition_bytes(&gpu, level, 4 << 20).unwrap();
+    assert!(solver.aggregated(), "the bar is too small to need the third level");
+    let on_gpu = solver.solve(&b, 1e-10, 3000).unwrap();
+    let peak = cpu.x.iter().fold(0.0f64, |m, v| m.max(v.abs()));
+    let worst = cpu.x.iter().zip(&on_gpu.x).fold(0.0f64, |m, (p, q)| m.max((p - q).abs()));
+    assert!(worst < 1e-8 * peak, "{worst} against {peak}");
+    assert!(
+        on_gpu.iterations.abs_diff(cpu.iterations) <= 2,
+        "{} against {}",
+        on_gpu.iterations,
+        cpu.iterations
+    );
 }

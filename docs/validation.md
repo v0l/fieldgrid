@@ -18,6 +18,9 @@ Against gmsh and scikit-fem on the same STEP exports (`gcad/tools/xcheck/run.sh`
 | 20 x 20 x 3 angle, 150 long, buckling factors | 36.48, 102.6, 211.7 | 36.48, 102.5, 211.4 |
 
 `crates/sims-fem/tests/bar.rs`: a bar meshed from plain triangles stretches within 1% of FL/AE.
+A bent bar solved on the GPU matches the CPU solve within 1e-8 of the peak displacement in
+the same number of iterations, with the stiffness whole and split into 4 MB pieces (the
+binding limit on lavapipe is 128 MB).
 Contact and friction rest on gcad's stack tests.
 
 ## sims-flow

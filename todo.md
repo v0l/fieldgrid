@@ -50,8 +50,12 @@ thread's listener and parent stage follow the work.
 
 ## sims-fem
 
-- The static solve runs on the CPU only; a GPU solve waits on a multigrid preconditioner.
-  (`gcad/docs/simulation.md`, phase 3)
+- The GPU path (`sims_fem::gpu`, f64 shaders) runs the static conjugate gradients and the
+  two-level preconditioner, including the rigid-body third level; only the aggregate
+  Cholesky (a few thousand unknowns) and the exact coarse solve on small meshes stay on the
+  CPU. Still on the CPU: assembling the stiffness and building the preconditioner (about 5 s
+  for 800,000 nodes), the matrix products inside LOBPCG for modes and buckling (their
+  preconditioner is on the GPU), and the scalar heat solve (`scalar::two_level`).
 - Simulate springs: a helical compression or extension spring meshed as a solid should
   give the rate k = G d⁴ / (8 D³ n) and, at large deflection, the stress with the Wahl factor;
   check both, then decide whether coils need a beam element instead of a tet mesh (a fine wire

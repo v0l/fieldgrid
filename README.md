@@ -9,7 +9,7 @@ is its own crate, so an app pulls in only what it uses.
 |---|---|
 | `sims-field` | Rectilinear grids, triangle BVH, mesh rasterising, a wgpu compute harness, and a Yee-grid FDTD engine with CPML, lumped ports, Debye loss and near-to-far-field |
 | `sims-flow` | A GPU lattice Boltzmann solver for air: D3Q19 with LES, coupled D3Q7 heat, turning rotors, drag and surface pressure on voxelised parts |
-| `sims-fem` | Quadratic tetrahedral finite elements: elastic statics with contact, friction and bonded parts, heat conduction, modal (LOBPCG) and buckling analysis |
+| `sims-fem` | Quadratic tetrahedral finite elements: elastic statics with contact, friction and bonded parts, heat conduction, modal (LOBPCG) and buckling analysis; the static solve and the preconditioner run on the GPU in 64-bit |
 | `sims-thermal` | Steady conduction on node grids, direct or conjugate gradients on the CPU or GPU: thermal bridges, surface temperatures, heat flows and coupling coefficients, checked against all four ISO 10211 cases; also the grid solver behind board DC drop and heat |
 | `sims-tet` | Delaunay tetrahedral meshing of a closed surface mesh: boundary recovery, quality refinement, sliver removal, flips and smoothing |
 | `sims-frame` | 3D frames for buildings and structures: beam-columns with end releases, load cases and combinations, self weight, modes and linear buckling |

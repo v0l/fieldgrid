@@ -206,6 +206,7 @@ pub fn solve(
     densities: &[f64],
     supports: &[Support],
     wanted: usize,
+    gpu: Option<&sims_field::Gpu>,
 ) -> Result<Modes> {
     let stiffness = assemble_bonded(mesh, materials)?;
     let mass = mass(mesh, densities);
@@ -264,18 +265,14 @@ pub fn solve(
         }
         let coarse = mesh.coarse();
         let level = TwoLevel::new(&shifted, &projectors, &coarse).map_err(|e| anyhow!(e))?;
+        let precondition = super::solve::Preconditioner::new(level, gpu).map_err(|e| anyhow!(e))?;
         let eigen = super::lobpcg::smallest(
             n,
             count,
             rigid,
             &|v: &[f64]| apply(&shifted, v),
             &|v: &[f64]| apply(&mass, v),
-            &|r: &[f64]| {
-                let full = reduced.expand(r);
-                let mut z = vec![0.0; full.len()];
-                level.apply(&full, &mut z);
-                reduced.restrict(&z)
-            },
+            &|r: &[f64]| reduced.restrict(&precondition.apply(&reduced.expand(r))),
             1.0e-6,
             400,
         );

@@ -2,13 +2,13 @@ use super::solve::{Block, Blocks, SPREAD_AIM, SPREAD_ROUNDS, block_jacobi, proje
 use rayon::prelude::*;
 
 pub struct Rigid {
-    a: Blocks,
-    projectors: Vec<Block>,
-    inverse: Vec<Block>,
-    weight: f64,
-    owner: Vec<u32>,
-    modes: Vec<[f64; 18]>,
-    count: usize,
+    pub(crate) a: Blocks,
+    pub(crate) projectors: Vec<Block>,
+    pub(crate) inverse: Vec<Block>,
+    pub(crate) weight: f64,
+    pub(crate) owner: Vec<u32>,
+    pub(crate) modes: Vec<[f64; 18]>,
+    pub(crate) count: usize,
     llt: faer::sparse::linalg::solvers::Llt<usize, f64>,
 }
 
@@ -186,8 +186,13 @@ impl Rigid {
         largest.max(1.0e-12)
     }
 
-    pub fn apply(&self, b: &[f64]) -> Vec<f64> {
+    pub(crate) fn solve_aggregates(&self, coarse: &[f64]) -> Vec<f64> {
         use faer::linalg::solvers::Solve;
+        let solved = self.llt.solve(faer::Mat::<f64>::from_fn(self.count * 6, 1, |i, _| coarse[i]));
+        (0..self.count * 6).map(|i| solved[(i, 0)]).collect()
+    }
+
+    pub fn apply(&self, b: &[f64]) -> Vec<f64> {
         let n = b.len();
         let mut b = b.to_vec();
         project(&self.projectors, &mut b);
@@ -206,12 +211,12 @@ impl Rigid {
                     (0..3).map(|i| m[i * 6 + j] * (b[3 * v + i] - ax[3 * v + i])).sum::<f64>();
             }
         }
-        let solved = self.llt.solve(faer::Mat::<f64>::from_fn(self.count * 6, 1, |i, _| coarse[i]));
+        let solved = self.solve_aggregates(&coarse);
         x.par_chunks_mut(3).enumerate().for_each(|(v, out)| {
             let g = self.owner[v] as usize;
             let m = &self.modes[v];
             for i in 0..3 {
-                out[i] += (0..6).map(|j| m[i * 6 + j] * solved[(g * 6 + j, 0)]).sum::<f64>();
+                out[i] += (0..6).map(|j| m[i * 6 + j] * solved[g * 6 + j]).sum::<f64>();
             }
         });
         project(&self.projectors, &mut x);

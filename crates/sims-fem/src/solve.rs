@@ -146,9 +146,9 @@ pub struct Coarse {
     pub positions: Vec<[f64; 3]>,
 }
 
-struct Cluster {
-    nodes: Vec<u32>,
-    inverse: Vec<f64>,
+pub(crate) struct Cluster {
+    pub(crate) nodes: Vec<u32>,
+    pub(crate) inverse: Vec<f64>,
 }
 
 pub fn dense_inverse(mut a: Vec<f64>, n: usize) -> Option<Vec<f64>> {
@@ -252,14 +252,14 @@ fn coarse_pattern(a: &Blocks, coarse: &Coarse) -> Blocks {
 const THIRD_LEVEL: usize = 20_000;
 
 pub struct TwoLevel<'a> {
-    a: &'a Blocks,
-    projectors: &'a [Block],
-    coarse: &'a Coarse,
-    inverse: Vec<Block>,
-    clusters: Vec<Cluster>,
+    pub(crate) a: &'a Blocks,
+    pub(crate) projectors: &'a [Block],
+    pub(crate) coarse: &'a Coarse,
+    pub(crate) inverse: Vec<Block>,
+    pub(crate) clusters: Vec<Cluster>,
     exact: Option<(Reduced, faer::sparse::linalg::solvers::Llt<usize, f64>)>,
-    rigid: Option<Box<super::aggregate::Rigid>>,
-    weight: f64,
+    pub(crate) rigid: Option<Box<super::aggregate::Rigid>>,
+    pub(crate) weight: f64,
 }
 
 impl<'a> TwoLevel<'a> {
@@ -419,8 +419,20 @@ impl<'a> TwoLevel<'a> {
         largest.max(1.0e-12)
     }
 
-    pub fn apply(&self, r: &[f64], z: &mut [f64]) {
+    pub(crate) fn coarse_correction(&self, gathered: &[f64]) -> Vec<f64> {
         use faer::linalg::solvers::Solve;
+        match (&self.exact, &self.rigid) {
+            (_, Some(rigid)) => rigid.apply(gathered),
+            (Some((reduced, llt)), None) => {
+                let rhs = reduced.restrict(gathered);
+                let solved = llt.solve(faer::Mat::<f64>::from_fn(reduced.count, 1, |i, _| rhs[i]));
+                reduced.expand(&(0..reduced.count).map(|i| solved[(i, 0)]).collect::<Vec<_>>())
+            }
+            (None, None) => vec![0.0; gathered.len()],
+        }
+    }
+
+    pub fn apply(&self, r: &[f64], z: &mut [f64]) {
         let n = r.len();
         let weight = self.weight;
         z.iter_mut().for_each(|v| *v = 0.0);
@@ -434,16 +446,7 @@ impl<'a> TwoLevel<'a> {
             project(self.projectors, z);
         }
         self.sweep(&rr, z, &mut ax, &mut residual);
-        let gathered = self.restrict(&residual);
-        let correction = match (&self.exact, &self.rigid) {
-            (_, Some(rigid)) => rigid.apply(&gathered),
-            (Some((reduced, llt)), None) => {
-                let rhs = reduced.restrict(&gathered);
-                let solved = llt.solve(faer::Mat::<f64>::from_fn(reduced.count, 1, |i, _| rhs[i]));
-                reduced.expand(&(0..reduced.count).map(|i| solved[(i, 0)]).collect::<Vec<_>>())
-            }
-            (None, None) => vec![0.0; gathered.len()],
-        };
+        let correction = self.coarse_correction(&self.restrict(&residual));
         self.prolong(&correction, z);
         project(self.projectors, z);
         for _ in 0..2 {
@@ -661,8 +664,17 @@ pub fn direct(a: &Blocks, b: &[f64], projectors: &[Block]) -> Result<Solution, S
 }
 
 pub enum Factored<'a> {
-    Direct { reduced: Reduced, llt: faer::sparse::linalg::solvers::Llt<usize, f64> },
-    Iterative { a: &'a Blocks, projectors: &'a [Block], level: TwoLevel<'a> },
+    Direct {
+        reduced: Reduced,
+        llt: faer::sparse::linalg::solvers::Llt<usize, f64>,
+    },
+    Iterative {
+        a: &'a Blocks,
+        projectors: &'a [Block],
+        level: TwoLevel<'a>,
+    },
+    #[cfg(not(target_arch = "wasm32"))]
+    Gpu(Box<super::gpu::Solver<'a>>),
 }
 
 impl<'a> Factored<'a> {
@@ -671,6 +683,7 @@ impl<'a> Factored<'a> {
         projectors: &'a [Block],
         coarse: &'a Coarse,
         direct_up_to: usize,
+        gpu: Option<&'a sims_field::Gpu>,
     ) -> Result<Self, String> {
         if a.nodes() * 3 <= direct_up_to {
             let _stage = sims_progress::stage("factoring the stiffness", None, "");
@@ -678,8 +691,16 @@ impl<'a> Factored<'a> {
             let llt = reduced.factor(&reduced.lower(a, None))?;
             Ok(Factored::Direct { reduced, llt })
         } else {
-            let _stage = sims_progress::stage("building the preconditioner", None, "");
-            Ok(Factored::Iterative { a, projectors, level: TwoLevel::new(a, projectors, coarse)? })
+            let stage = sims_progress::stage("building the preconditioner", None, "");
+            let level = TwoLevel::new(a, projectors, coarse)?;
+            drop(stage);
+            #[cfg(not(target_arch = "wasm32"))]
+            if let Some(gpu) = gpu {
+                return Ok(Factored::Gpu(Box::new(super::gpu::Solver::new(gpu, level)?)));
+            }
+            #[cfg(target_arch = "wasm32")]
+            let _ = gpu;
+            Ok(Factored::Iterative { a, projectors, level })
         }
     }
 
@@ -701,6 +722,52 @@ impl<'a> Factored<'a> {
                     level.apply(r, z)
                 })
             }
+            #[cfg(not(target_arch = "wasm32"))]
+            Factored::Gpu(solver) => solver.solve(b, 1.0e-10, 3000).unwrap_or_else(|_| {
+                let level = solver.level();
+                preconditioned(
+                    level.a,
+                    b,
+                    level.projectors,
+                    1.0e-10,
+                    3000,
+                    &|r: &[f64], z: &mut [f64]| level.apply(r, z),
+                )
+            }),
+        }
+    }
+}
+
+pub enum Preconditioner<'a> {
+    Cpu(TwoLevel<'a>),
+    #[cfg(not(target_arch = "wasm32"))]
+    Gpu(Box<super::gpu::Solver<'a>>),
+}
+
+impl<'a> Preconditioner<'a> {
+    pub fn new(level: TwoLevel<'a>, gpu: Option<&'a sims_field::Gpu>) -> Result<Self, String> {
+        #[cfg(not(target_arch = "wasm32"))]
+        if let Some(gpu) = gpu {
+            return Ok(Preconditioner::Gpu(Box::new(super::gpu::Solver::new(gpu, level)?)));
+        }
+        #[cfg(target_arch = "wasm32")]
+        let _ = gpu;
+        Ok(Preconditioner::Cpu(level))
+    }
+
+    pub fn apply(&self, r: &[f64]) -> Vec<f64> {
+        match self {
+            Preconditioner::Cpu(level) => {
+                let mut z = vec![0.0; r.len()];
+                level.apply(r, &mut z);
+                z
+            }
+            #[cfg(not(target_arch = "wasm32"))]
+            Preconditioner::Gpu(solver) => solver.precondition_vector(r).unwrap_or_else(|_| {
+                let mut z = vec![0.0; r.len()];
+                solver.level().apply(r, &mut z);
+                z
+            }),
         }
     }
 }
