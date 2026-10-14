@@ -69,6 +69,22 @@ thread's listener and parent stage follow the work.
 - No Pst flicker readout (EN 61000-3-3): it needs the IEC 61000-4-15 flickermeter on the
   supply voltage over minutes of transient. (agentee TODO)
 
+## Buildings
+
+- Structural frames (`sims-frame`): 3D beam-column elements with end releases, load cases and
+  combinations, self weight, modes and linear buckling. Then storey drift, P-delta, plate and
+  shell elements for floors and walls, and a cross-check against OpenSees on a multi-storey
+  frame.
+- Wind loads: `sims-flow` on building shapes, reading pressure coefficients on each face and
+  the base shear and moment, checked against the CAARC standard tall building and the TPU
+  aerodynamic database. Needs the wall model from the `sims-flow` list to get separation right.
+- Thermal and energy: U-values and linear thermal bridges (ψ) in 2D and 3D against the
+  ISO 10211 reference cases, then a dynamic zone model with solar gains, internal gains and
+  ventilation for heating and cooling loads, checked against ASHRAE 140 (BESTEST).
+- Room acoustics: reverberation time and STI by image sources and ray tracing, checked
+  against Sabine and Eyring in diffuse rooms and published measured rooms; then airborne sound
+  insulation of walls (mass law, coincidence) against measured partitions.
+
 ## sims-hf and sims-propagation
 
 - P.533 (`sims-hf`): the mirror-reflection height term G omits the `90.47·xr` term the Recommendation has
