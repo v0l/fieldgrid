@@ -63,6 +63,11 @@ pub enum ElemKind {
     Vccs {
         gm: f64,
     },
+    Varistor {
+        v1ma: f64,
+        alpha: f64,
+        c: f64,
+    },
 }
 
 #[derive(Clone, Debug, Serialize)]
@@ -79,6 +84,77 @@ pub enum Wave {
     Pulse { low: f64, high: f64, delay: f64, rise: f64, fall: f64, width: f64, period: f64 },
     Sine { offset: f64, amplitude: f64, frequency: f64, delay: f64 },
     Steps { points: Vec<(f64, f64)> },
+    Surge { offset: f64, peak: f64, delay: f64, shape: Surge },
+    Burst { offset: f64, peak: f64, delay: f64, rate: f64, length: f64, period: f64 },
+}
+
+#[derive(Clone, Copy, Debug, PartialEq, Serialize)]
+#[serde(rename_all = "snake_case")]
+pub enum Surge {
+    Open,
+    Short,
+}
+
+struct Heidler {
+    rise: f64,
+    fall: f64,
+    order: f64,
+}
+
+const OPEN: Heidler = Heidler { rise: 0.356e-6, fall: 65.845e-6, order: 1.852 };
+const SHORT: Heidler = Heidler { rise: 47.52e-6, fall: 4.296e-6, order: 2.741 };
+const FAST: Heidler = Heidler { rise: 3.5e-9, fall: 50e-9, order: 1.8 };
+
+impl Heidler {
+    fn raw(&self, t: f64) -> f64 {
+        if t <= 0.0 {
+            return 0.0;
+        }
+        let x = (t / self.rise).powf(self.order);
+        x / (1.0 + x) * (-t / self.fall).exp()
+    }
+
+    fn peak(&self) -> f64 {
+        let (mut lo, mut hi) = (0.0, 20.0 * self.rise.max(self.fall));
+        for _ in 0..200 {
+            let (a, b) = (lo + (hi - lo) / 3.0, hi - (hi - lo) / 3.0);
+            if self.raw(a) < self.raw(b) { lo = a } else { hi = b }
+        }
+        self.raw(0.5 * (lo + hi))
+    }
+
+    fn at(&self, t: f64) -> f64 {
+        self.raw(t) / self.peak()
+    }
+
+    fn span(&self) -> f64 {
+        self.rise.min(self.fall)
+    }
+}
+
+fn burst_pulse(u: f64, rate: f64, length: f64) -> Option<f64> {
+    if u < 0.0 || u >= length {
+        return None;
+    }
+    Some(u - (u * rate).floor() / rate)
+}
+
+impl Surge {
+    fn heidler(self) -> &'static Heidler {
+        match self {
+            Surge::Open => &OPEN,
+            Surge::Short => &SHORT,
+        }
+    }
+}
+
+fn marks(start: f64, first: f64, last: f64, stop: f64, out: &mut Vec<f64>) {
+    out.push(start);
+    let mut e = first;
+    while e <= last && start + e <= stop {
+        out.push(start + e);
+        e *= std::f64::consts::SQRT_2;
+    }
 }
 
 impl Wave {
@@ -123,6 +199,22 @@ impl Wave {
                 }
                 points.last().map_or(dc, |p| p.1)
             }
+            Wave::Surge { offset, peak, delay, shape } => {
+                offset + peak * shape.heidler().at(t - delay)
+            }
+            Wave::Burst { offset, peak, delay, rate, length, period } => {
+                let mut u = t - delay;
+                if u < 0.0 {
+                    return *offset;
+                }
+                if *period > 0.0 {
+                    u %= period;
+                }
+                match burst_pulse(u, *rate, *length) {
+                    Some(since) => offset + peak * FAST.at(since),
+                    None => *offset,
+                }
+            }
         }
     }
 
@@ -146,6 +238,33 @@ impl Wave {
                 out
             }
             Wave::Steps { points } => points.iter().map(|p| p.0).filter(|&t| t <= stop).collect(),
+            Wave::Surge { delay, shape, .. } => {
+                let h = shape.heidler();
+                let mut out = Vec::new();
+                marks(*delay, h.span() * 0.05, 10.0 * h.rise.max(h.fall), stop, &mut out);
+                out.retain(|t| *t <= stop);
+                out
+            }
+            Wave::Burst { delay, rate, length, period, .. } => {
+                let mut out = Vec::new();
+                let mut start = *delay;
+                while start <= stop {
+                    let count = (length * rate).ceil() as usize;
+                    for k in 0..count {
+                        let at = start + k as f64 / rate;
+                        if at > stop {
+                            break;
+                        }
+                        marks(at, FAST.span() * 0.1, 10.0 * FAST.fall, stop, &mut out);
+                    }
+                    if *period <= 0.0 {
+                        break;
+                    }
+                    start += period;
+                }
+                out.retain(|t| *t <= stop);
+                out
+            }
         }
     }
 }

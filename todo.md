@@ -65,8 +65,6 @@ the same rule.
 
 ## sims-circuit
 
-- No varistor element, so a MOV clamp cannot be modelled, and no IEC 61000-4-5 combination
-  wave (1.2/50 us, 8/20 us) or 61000-4-4 burst drive. (agentee TODO)
 - No conducted-emission readout (a LISN and dBuV from 150 kHz to 30 MHz against CISPR 11),
   no harmonic readout against EN 61000-3-2 class A, and no Pst flicker readout
   (EN 61000-3-3). (agentee TODO)

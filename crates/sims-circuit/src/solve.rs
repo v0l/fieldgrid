@@ -20,6 +20,7 @@ enum Unit {
     C { a: Ix, b: Ix, c: f64 },
     L { a: Ix, b: Ix, l: f64, j: usize },
     D { a: Ix, k: Ix, is: f64, n: f64, bv: Option<f64>, mem: usize },
+    Mov { a: Ix, b: Ix, v1: f64, alpha: f64, mem: usize },
     Q { c: Ix, b: Ix, e: Ix, pnp: bool, is: f64, bf: f64, br: f64, va: Option<f64>, mem: usize },
     M { d: Ix, g: Ix, s: Ix, p: bool, vth: f64, k: f64, lambda: f64, mem: usize },
     Gm { p: Ix, n: Ix, cp: Ix, cn: Ix, gm: f64, offset: f64 },
@@ -178,6 +179,17 @@ fn pnjlim(new: f64, old: f64, nvt: f64, vcrit: f64) -> f64 {
     }
 }
 
+fn varistor(v: f64, v1: f64, alpha: f64) -> (f64, f64) {
+    let i = 1e-3 * (v.abs() / v1).powf(alpha);
+    let g = if v.abs() > 0.0 { alpha * i / v.abs() } else { 0.0 };
+    (i * v.signum(), g)
+}
+
+fn movlim(new: f64, old: f64, v1: f64, alpha: f64) -> f64 {
+    let most = old.abs().max(v1) * (1.0 + 2.0 / alpha);
+    if new.abs() > most { most * new.signum() } else { new }
+}
+
 fn vcrit(is: f64, nvt: f64) -> f64 {
     nvt * (nvt / (std::f64::consts::SQRT_2 * is)).ln()
 }
@@ -265,6 +277,13 @@ impl Net {
                 }
                 ElemKind::Capacitor { c } => push(Unit::C { a: n[0], b: n[1], c }, true),
                 ElemKind::Inductor { l } => push(Unit::L { a: n[0], b: n[1], l, j: 0 }, true),
+                ElemKind::Varistor { v1ma, alpha, c } => {
+                    push(Unit::Mov { a: n[0], b: n[1], v1: v1ma, alpha, mem: mems }, true);
+                    mems += 1;
+                    if c > 0.0 {
+                        push(Unit::C { a: n[0], b: n[1], c }, false);
+                    }
+                }
                 ElemKind::Diode { is, n: ni, bv, cj } => {
                     push(Unit::D { a: n[0], k: n[1], is, n: ni, bv, mem: mems }, true);
                     noise.push(NoiseSrc { a: n[0], b: n[1], psd: Psd::Shot(ei, 0) });
@@ -404,6 +423,7 @@ impl Net {
         for u in &self.units {
             match *u {
                 Unit::D { a, k, mem: m, .. } => mem[m] = v(x, a) - v(x, k),
+                Unit::Mov { a, b, mem: m, .. } => mem[m] = v(x, a) - v(x, b),
                 Unit::Q { c, b, e, pnp, mem: m, .. } => {
                     let sg = if pnp { -1.0 } else { 1.0 };
                     mem[m] = sg * (v(x, b) - v(x, e));
@@ -481,6 +501,15 @@ impl Net {
                     let (i, g) = diode(vd, is, n, bv, vt);
                     s.cond(a, k, g);
                     s.cur(a, k, i - g * vd);
+                }
+                Unit::Mov { a, b, v1, alpha, mem: m } => {
+                    let raw = v(x, a) - v(x, b);
+                    let vd = movlim(raw, mem[m], v1, alpha);
+                    s.limited |= (vd - raw).abs() > 1e-9;
+                    mem[m] = vd;
+                    let (i, g) = varistor(vd, v1, alpha);
+                    s.cond(a, b, g);
+                    s.cur(a, b, i - g * vd);
                 }
                 Unit::Q { c, b, e, pnp, is, bf, br, va, mem: m } => {
                     let sg = if pnp { -1.0 } else { 1.0 };
@@ -800,6 +829,9 @@ impl Net {
                 }
                 Unit::D { a, k, is, n, bv, .. } if mine => {
                     return Some(diode(v(x, a) - v(x, k), is, n, bv, self.vt).0);
+                }
+                Unit::Mov { a, b, v1, alpha, .. } if mine => {
+                    return Some(varistor(v(x, a) - v(x, b), v1, alpha).0);
                 }
                 _ => {}
             }
