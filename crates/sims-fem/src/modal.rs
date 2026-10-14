@@ -231,7 +231,7 @@ pub fn solve(
         blocks.multiply(&full, &mut out);
         reduced.restrict(&out)
     };
-    let dot = |a: &[f64], b: &[f64]| a.par_iter().zip(b).map(|(p, q)| p * q).sum::<f64>();
+    let dot = crate::solve::dot;
     let (values, x, iterations) = if n <= DIRECT_LIMIT {
         shift_invert(&reduced, &stiffness, &mass, shift, count)?
     } else {
@@ -362,7 +362,7 @@ fn shift_invert(
                 .collect()
         })
         .collect();
-    let dot = |a: &[f64], b: &[f64]| a.par_iter().zip(b).map(|(p, q)| p * q).sum::<f64>();
+    let dot = crate::solve::dot;
     let mut values = vec![0.0; width];
     let mut iterations = 0;
     for round in 0..200 {

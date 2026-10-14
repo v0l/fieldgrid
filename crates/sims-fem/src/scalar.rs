@@ -219,7 +219,7 @@ pub fn two_level(
             smooth(r, z, &mut az);
         }
     };
-    let dot = |x: &[f64], y: &[f64]| x.par_iter().zip(y).map(|(p, q)| p * q).sum::<f64>();
+    let dot = crate::solve::dot;
     let mut x = vec![0.0; n];
     let mut r = b.to_vec();
     let norm = dot(&r, &r).sqrt();

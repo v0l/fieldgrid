@@ -172,7 +172,7 @@ fn inverse_iteration(
                 .collect()
         })
         .collect();
-    let dot = |a: &[f64], b: &[f64]| a.par_iter().zip(b).map(|(p, q)| p * q).sum::<f64>();
+    let dot = crate::solve::dot;
     let mut values = vec![0.0; width];
     for round in 0..300 {
         let y: Vec<Vec<f64>> =

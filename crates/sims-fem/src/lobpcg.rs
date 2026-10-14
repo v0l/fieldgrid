@@ -47,7 +47,7 @@ impl Block {
 }
 
 fn dot(a: &[f64], b: &[f64]) -> f64 {
-    a.par_iter().zip(b).map(|(x, y)| x * y).sum()
+    crate::solve::dot(a, b)
 }
 
 fn axpy(y: &mut [f64], a: f64, x: &[f64]) {

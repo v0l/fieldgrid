@@ -104,8 +104,13 @@ impl Blocks {
     }
 }
 
-fn dot(a: &[f64], b: &[f64]) -> f64 {
-    a.par_iter().zip(b).map(|(x, y)| x * y).sum()
+pub(crate) fn dot(a: &[f64], b: &[f64]) -> f64 {
+    a.par_chunks(4096)
+        .zip(b.par_chunks(4096))
+        .map(|(x, y)| x.iter().zip(y).map(|(x, y)| x * y).sum::<f64>())
+        .collect::<Vec<_>>()
+        .into_iter()
+        .sum()
 }
 
 pub fn project(projectors: &[Block], v: &mut [f64]) {
