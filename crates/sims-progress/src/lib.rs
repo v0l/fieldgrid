@@ -104,7 +104,14 @@ type Sink = Arc<dyn Fn(&Report) + Send + Sync>;
 
 static SINK: RwLock<Option<Sink>> = RwLock::new(None);
 static PHASE: Mutex<Vec<String>> = Mutex::new(Vec::new());
-static OPEN: Mutex<Vec<(u64, String)>> = Mutex::new(Vec::new());
+struct Open {
+    id: u64,
+    thread: std::thread::ThreadId,
+    scoped: bool,
+    name: String,
+}
+
+static OPEN: Mutex<Vec<Open>> = Mutex::new(Vec::new());
 static NEXT: std::sync::atomic::AtomicU64 = std::sync::atomic::AtomicU64::new(0);
 
 const EVERY: Duration = Duration::from_millis(100);
@@ -145,9 +152,10 @@ pub fn listen_here_to_all(sink: impl Fn(&Report) + Send + Sync + 'static) -> Lis
     ListeningHere(before)
 }
 
-fn listener() -> Option<(Sink, bool)> {
-    HERE.with(|here| here.borrow().clone())
-        .or_else(|| SINK.read().unwrap_or_else(|e| e.into_inner()).clone().map(|s| (s, false)))
+fn listener() -> Option<(Sink, bool, bool)> {
+    HERE.with(|here| here.borrow().clone()).map(|(s, every)| (s, every, true)).or_else(|| {
+        SINK.read().unwrap_or_else(|e| e.into_inner()).clone().map(|s| (s, false, false))
+    })
 }
 
 fn sink() -> Option<Sink> {
@@ -210,7 +218,7 @@ pub fn stage_after(
     unit: &'static str,
     delay: Duration,
 ) -> Stage {
-    let Some((sink, every_stage)) = listener() else {
+    let Some((sink, every_stage, scoped)) = listener() else {
         return Stage(None);
     };
     let delay = if every_stage { Duration::ZERO } else { delay };
@@ -218,8 +226,13 @@ pub fn stage_after(
     let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let parent = {
         let mut open = OPEN.lock().unwrap_or_else(|e| e.into_inner());
-        let parent = open.first().map(|(_, n)| n.clone());
-        open.push((id, name.clone()));
+        let thread = std::thread::current().id();
+        let parent = open
+            .iter()
+            .find(|o| o.thread == thread)
+            .or_else(|| open.iter().find(|o| !scoped && !o.scoped))
+            .map(|o| o.name.clone());
+        open.push(Open { id, thread, scoped, name: name.clone() });
         parent
     };
     let stage = Stage(Some(Inner {
@@ -332,7 +345,7 @@ impl Drop for Stage {
     fn drop(&mut self) {
         self.send(true);
         if let Some(inner) = &self.0 {
-            OPEN.lock().unwrap_or_else(|e| e.into_inner()).retain(|(id, _)| *id != inner.id);
+            OPEN.lock().unwrap_or_else(|e| e.into_inner()).retain(|o| o.id != inner.id);
         }
     }
 }
@@ -389,6 +402,43 @@ mod tests {
         assert_eq!(parent_of("building parts").as_deref(), Some("building the model"));
         assert_eq!(parent_of("building the model"), None);
         assert_eq!(parent_of("solving"), None);
+    }
+
+    #[test]
+    fn a_worker_thread_stage_nests_under_the_global_run() {
+        let _serial = SERIAL.lock().unwrap_or_else(|e| e.into_inner());
+        let seen: Arc<Mutex<Vec<Report>>> = Arc::default();
+        let into = seen.clone();
+        let listening = listen(move |r| into.lock().unwrap().push(r.clone()));
+        {
+            let _outer = stage("sweeping poses", None, "");
+            std::thread::spawn(|| drop(stage("solving the field", None, ""))).join().unwrap();
+        }
+        drop(listening);
+        let seen = seen.lock().unwrap();
+        let inner = seen.iter().find(|r| r.stage == "solving the field").unwrap();
+        assert_eq!(inner.parent.as_deref(), Some("sweeping poses"));
+    }
+
+    #[test]
+    fn a_stage_on_another_thread_is_not_a_parent() {
+        let (opened, close) = (std::sync::mpsc::channel(), std::sync::mpsc::channel::<()>());
+        let other = std::thread::spawn(move || {
+            let _quiet = listen_here(|_| {});
+            let _open = stage("elsewhere", None, "");
+            opened.0.send(()).unwrap();
+            close.1.recv().unwrap();
+        });
+        opened.1.recv().unwrap();
+        let seen: Arc<Mutex<Vec<Report>>> = Arc::default();
+        let into = seen.clone();
+        {
+            let _listening = listen_here(move |r| into.lock().unwrap().push(r.clone()));
+            stage("here", None, "");
+        }
+        close.0.send(()).unwrap();
+        other.join().unwrap();
+        assert!(seen.lock().unwrap().iter().all(|r| r.parent.is_none()));
     }
 
     #[test]

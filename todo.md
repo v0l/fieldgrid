@@ -15,8 +15,8 @@ listen with `listen_here_to_all`, which hears them from their start. New solvers
 same rule.
 
 - A listener is global (`listen`) or for one thread (`listen_here`). A stage opened on a
-  rayon worker reaches only the global one: `field::solve` in `sims-magnetic`, run inside
-  gcad's parallel pose sweep, is one.
+  rayon worker reaches only the global one, so a thread-scoped listener (agentee's viewer)
+  misses `field::solve` in `sims-magnetic` when it runs inside gcad's parallel pose sweep.
 
 ## sims-flow
 
