@@ -49,8 +49,9 @@ blocking readbacks are not available, so `sims-quasistatic` runs on the CPU ther
 
 Every solver reports what it is doing through `sims-progress`: FDTD time steps, circuit
 analyses, meshing, factoring and iterating, lattice steps, Newton on the magnetic field. Call
-`sims_progress::listen` with a closure to receive the stages; with no listener they do
-nothing. A new solver has to report too, with a test that listens for its stages.
+`sims_progress::listen` with a closure to receive the stages, or `listen_here` to receive
+only those opened on the current thread when several solves run at once. With no listener
+they do nothing. A new solver has to report too, with a test that listens for its stages.
 
 ## Tests
 

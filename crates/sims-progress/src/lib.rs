@@ -122,8 +122,27 @@ pub fn listen(sink: impl Fn(&Report) + Send + Sync + 'static) -> Listening {
     Listening(())
 }
 
+thread_local! {
+    static HERE: std::cell::RefCell<Option<Sink>> = const { std::cell::RefCell::new(None) };
+}
+
+pub struct ListeningHere(Option<Sink>);
+
+impl Drop for ListeningHere {
+    fn drop(&mut self) {
+        let before = self.0.take();
+        HERE.with(|here| *here.borrow_mut() = before);
+    }
+}
+
+pub fn listen_here(sink: impl Fn(&Report) + Send + Sync + 'static) -> ListeningHere {
+    let before = HERE.with(|here| here.borrow_mut().replace(Arc::new(sink)));
+    ListeningHere(before)
+}
+
 fn sink() -> Option<Sink> {
-    SINK.read().unwrap_or_else(|e| e.into_inner()).clone()
+    HERE.with(|here| here.borrow().clone())
+        .or_else(|| SINK.read().unwrap_or_else(|e| e.into_inner()).clone())
 }
 
 pub struct Phase(bool);
@@ -380,5 +399,24 @@ mod tests {
     fn residual_progress_is_logarithmic() {
         assert!((residual_fraction(1.0, 1.0e-5, 1.0e-10) - 0.5).abs() < 1.0e-12);
         assert_eq!(residual_fraction(1.0, 1.0e-12, 1.0e-10), 1.0);
+    }
+
+    #[test]
+    fn a_thread_listener_sees_only_its_own_thread() {
+        let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+        let into = seen.clone();
+        let other = std::thread::spawn(|| {
+            let _quiet = listen_here(|_| {});
+            stage("elsewhere", None, "");
+        });
+        {
+            let _listening = listen_here(move |r| into.lock().unwrap().push(r.stage.clone()));
+            stage("here", None, "");
+            other.join().unwrap();
+        }
+        stage("after", None, "");
+        let seen = seen.lock().unwrap();
+        assert!(seen.iter().any(|s| s == "here"), "{seen:?}");
+        assert!(!seen.iter().any(|s| s == "elsewhere" || s == "after"), "{seen:?}");
     }
 }

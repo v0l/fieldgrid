@@ -13,10 +13,9 @@ a test that listens and checks for its stages (`a_run_reports_its_time_steps`,
 `a_run_reports_its_analyses`, `meshing_and_solving_report_progress`). New solvers follow
 the same rule.
 
-- agentee and antenna-toolbox never call `sims_progress::listen`, so the circuit,
-  cross-section and FDTD stages they now emit are dropped. agentee reports from
-  `crates/agentee-sim/src/runner.rs`, antenna-toolbox through the FDTD callback in
-  `crates/solver/src/fdtd/mod.rs`; both should show the stages instead.
+- A listener is global (`listen`) or for one thread (`listen_here`). Stages opened on
+  rayon workers reach only the global one, so an app that runs several solves at once on its
+  own threads (the agentee viewer) loses those.
 - `sims-quasistatic`, `sims-flow` and `sims-magnetic` use delayed stages, so their tests do
   not see them on the small cases they run; they have no progress test.
 
