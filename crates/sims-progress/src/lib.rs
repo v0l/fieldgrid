@@ -123,10 +123,10 @@ pub fn listen(sink: impl Fn(&Report) + Send + Sync + 'static) -> Listening {
 }
 
 thread_local! {
-    static HERE: std::cell::RefCell<Option<Sink>> = const { std::cell::RefCell::new(None) };
+    static HERE: std::cell::RefCell<Option<(Sink, bool)>> = const { std::cell::RefCell::new(None) };
 }
 
-pub struct ListeningHere(Option<Sink>);
+pub struct ListeningHere(Option<(Sink, bool)>);
 
 impl Drop for ListeningHere {
     fn drop(&mut self) {
@@ -136,13 +136,22 @@ impl Drop for ListeningHere {
 }
 
 pub fn listen_here(sink: impl Fn(&Report) + Send + Sync + 'static) -> ListeningHere {
-    let before = HERE.with(|here| here.borrow_mut().replace(Arc::new(sink)));
+    let before = HERE.with(|here| here.borrow_mut().replace((Arc::new(sink), false)));
     ListeningHere(before)
 }
 
-fn sink() -> Option<Sink> {
+pub fn listen_here_to_all(sink: impl Fn(&Report) + Send + Sync + 'static) -> ListeningHere {
+    let before = HERE.with(|here| here.borrow_mut().replace((Arc::new(sink), true)));
+    ListeningHere(before)
+}
+
+fn listener() -> Option<(Sink, bool)> {
     HERE.with(|here| here.borrow().clone())
-        .or_else(|| SINK.read().unwrap_or_else(|e| e.into_inner()).clone())
+        .or_else(|| SINK.read().unwrap_or_else(|e| e.into_inner()).clone().map(|s| (s, false)))
+}
+
+fn sink() -> Option<Sink> {
+    listener().map(|l| l.0)
 }
 
 pub struct Phase(bool);
@@ -201,9 +210,10 @@ pub fn stage_after(
     unit: &'static str,
     delay: Duration,
 ) -> Stage {
-    let Some(sink) = sink() else {
+    let Some((sink, every_stage)) = listener() else {
         return Stage(None);
     };
+    let delay = if every_stage { Duration::ZERO } else { delay };
     let name = name.into();
     let id = NEXT.fetch_add(1, std::sync::atomic::Ordering::Relaxed);
     let parent = {
@@ -393,6 +403,18 @@ mod tests {
         }
         drop(listening);
         assert!(!seen.lock().unwrap().iter().any(|r| r.stage == "quick part"));
+    }
+
+    #[test]
+    fn a_listener_to_all_hears_quick_delayed_stages() {
+        let seen: Arc<Mutex<Vec<String>>> = Arc::default();
+        let into = seen.clone();
+        {
+            let _listening =
+                listen_here_to_all(move |r| into.lock().unwrap().push(r.stage.clone()));
+            stage_after("quick part", None, "", Duration::from_secs(60));
+        }
+        assert!(seen.lock().unwrap().iter().any(|s| s == "quick part"));
     }
 
     #[test]

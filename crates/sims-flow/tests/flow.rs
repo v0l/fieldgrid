@@ -731,3 +731,18 @@ fn turning_square_matches_the_turning_frame() {
     println!("turning rod {moving}, still rod in a turning wall {still}");
     assert!((moving - still).abs() <= 0.02 * still.abs(), "turning rod {moving} against {still}");
 }
+
+#[test]
+#[cfg_attr(not(feature = "gpu-tests"), ignore = "GPU, run with --features gpu-tests")]
+fn stepping_reports_its_steps() {
+    let (_device, gpu) = device();
+    let size = [8, 8, 8];
+    let mut lattice = Lattice::new(&gpu, &domain(size, vec![0u8; 512])).expect("lattice");
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let into = seen.clone();
+    let listening =
+        sims_progress::listen_here_to_all(move |r| into.lock().unwrap().push(r.stage.clone()));
+    lattice.run(&Settings::laminar(0.1), 10).expect("runs");
+    drop(listening);
+    assert!(seen.lock().unwrap().iter().any(|s| s == "stepping the air"));
+}

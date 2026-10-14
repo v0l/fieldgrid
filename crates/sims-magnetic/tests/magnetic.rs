@@ -529,3 +529,18 @@ fn surface_magnet_motor_matches_femm() {
         );
     }
 }
+
+#[test]
+fn solving_reports_its_iterations() {
+    let shapes =
+        vec![shape("wire", vec![disc([0.0; 2], 5.0e-3, 24)], Stuff::Coil { amps: 1.0 }, false)];
+    let layout = Layout { shapes: shapes.clone(), size: 2.0e-3, outer: 30.0e-3, gap: None };
+    let plane = mesh(&layout).expect("meshes");
+    let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+    let into = seen.clone();
+    let listening =
+        sims_progress::listen_here_to_all(move |r| into.lock().unwrap().push(r.stage.clone()));
+    solve(&plane, &shapes, 0).expect("solves");
+    drop(listening);
+    assert!(seen.lock().unwrap().iter().any(|s| s == "solving the field"));
+}

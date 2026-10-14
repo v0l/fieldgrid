@@ -510,4 +510,18 @@ mod tests {
         let peak_b = b.phi[c];
         assert!((peak_a - peak_b).abs() / (peak_a - 25.0) < 2e-3, "{peak_a} {peak_b} {}", b.device);
     }
+
+    #[test]
+    fn solving_reports_its_iterations() {
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let into = seen.clone();
+        let listening =
+            sims_progress::listen_here_to_all(move |r| into.lock().unwrap().push(r.stage.clone()));
+        bar(8).solve_cpu(1e-8, 1000);
+        crate::xsection::line_raw(0.3e-3, 0.2e-3, 35e-6, 4.3, None).expect("solves");
+        drop(listening);
+        let seen = seen.lock().unwrap();
+        assert!(seen.iter().any(|s| s == "solving the conduction grid"), "{seen:?}");
+        assert!(seen.iter().any(|s| s == "solving the cross-section"), "{seen:?}");
+    }
 }

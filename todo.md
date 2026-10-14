@@ -10,14 +10,13 @@ Open work on the solvers. Items came from the apps' own lists (`gcad/TODO.md`, `
 Every solver entry point that can run longer than a moment reports through `sims-progress`:
 `stage` for a whole run, `stage_after` for inner loops that are usually quick. Each crate has
 a test that listens and checks for its stages (`a_run_reports_its_time_steps`,
-`a_run_reports_its_analyses`, `meshing_and_solving_report_progress`). New solvers follow
-the same rule.
+`a_run_reports_its_analyses`, `meshing_and_solving_report_progress`); tests of delayed stages
+listen with `listen_here_to_all`, which hears them from their start. New solvers follow the
+same rule.
 
 - A listener is global (`listen`) or for one thread (`listen_here`). A stage opened on a
   rayon worker reaches only the global one: `field::solve` in `sims-magnetic`, run inside
   gcad's parallel pose sweep, is one.
-- `sims-quasistatic`, `sims-flow` and `sims-magnetic` use delayed stages, so their tests do
-  not see them on the small cases they run; they have no progress test.
 
 ## sims-flow
 
