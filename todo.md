@@ -17,8 +17,8 @@ the same rule.
   cross-section and FDTD stages they now emit are dropped. agentee reports from
   `crates/agentee-sim/src/runner.rs`, antenna-toolbox through the FDTD callback in
   `crates/solver/src/fdtd/mod.rs`; both should show the stages instead.
-- `sims-quasistatic` and `sims-flow` use delayed stages, so their tests do not see them on
-  the small cases they run; they have no progress test.
+- `sims-quasistatic`, `sims-flow` and `sims-magnetic` use delayed stages, so their tests do
+  not see them on the small cases they run; they have no progress test.
 
 ## sims-flow
 
@@ -57,12 +57,8 @@ the same rule.
 - The static solve runs on the CPU only; a GPU solve waits on a multigrid preconditioner.
   (`gcad/docs/simulation.md`, phase 3)
 
-## Magnetics (in gcad, to move)
+## sims-magnetic
 
-- `gcad/src/sim/magnetic/` holds the 2D magnetostatic solver: `plane.rs` (slice mesher),
-  `field.rs` (Newton on A_z), `steel.rs` (B-H tables). Only `mod.rs` touches gcad types. Move
-  the three into a `sims-magnetic` crate with their checks from `gcad/tests/magnetic.rs`, and
-  give it progress stages.
 - Not built: `phase` and `drive` (sinusoidal phase currents that follow the rotor through a
   sweep) and a `kt` reading; force on a sliding part (weighted Maxwell stress); eddy and core
   losses (2D time-harmonic A_z, Steinmetz/Bertotti) feeding heat; 3D magnetics on the tet mesh

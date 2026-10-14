@@ -1,0 +1,14 @@
+[package]
+name = "sims-magnetic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "2D magnetostatics: a slice mesher, nonlinear A_z by Newton with B-H curves, airgap torque and flux linkage for motors"
+
+[dependencies]
+anyhow.workspace = true
+sims-fem.workspace = true
+sims-progress.workspace = true
+spade = "2.15"
