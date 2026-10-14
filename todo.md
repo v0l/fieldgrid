@@ -83,9 +83,11 @@ thread's listener and parent stage follow the work.
 - Thermal and energy: U-values and linear thermal bridges (ψ) in 2D and 3D against the
   ISO 10211 reference cases, then a dynamic zone model with solar gains, internal gains and
   ventilation for heating and cooling loads, checked against ASHRAE 140 (BESTEST).
-- Room acoustics: reverberation time and STI by image sources and ray tracing, checked
-  against Sabine and Eyring in diffuse rooms and published measured rooms; then airborne sound
-  insulation of walls (mass law, coincidence) against measured partitions.
+- Room acoustics (`sims-acoustics` traces rays for T20, T30, EDT, C80, D50 and STI, checked
+  against Eyring, ISO 9613-1 and exponential decays). Still to do: image sources for the early
+  part, background noise, speech level and auditory masking in STI (IEC 60268-16 Annex A),
+  a measured room (the PTB round robin), and airborne sound insulation of walls (mass law,
+  coincidence) against measured partitions.
 
 ## sims-hf and sims-propagation
 

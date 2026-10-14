@@ -106,3 +106,15 @@ a cantilever's first two bending frequencies within 1e-4 on ten and twenty eleme
 three-storey, two-by-two-bay concrete frame with floor masses matches OpenSees
 (`elasticBeamColumn`, `tools/opensees_frame.py`) within 1e-6 on displacements, a base moment
 and the first six periods.
+
+## sims-acoustics
+
+`crates/sims-acoustics/tests/acoustics.rs`: air absorption against seven entries of ISO 9613-1
+Table 1 within 0.6% (the table's three figures); an exponential decay reads back its T30, EDT,
+D50, C80 within 0.1% and its modulation transfer within 0.2% of
+1 / sqrt(1 + (2 pi F T / 13.8)^2); a perfect channel gives an STI of 1. In a 10 x 7 x 4 m room
+with fully diffuse walls the traced T30 sits between Eyring and Sabine, 1.2% over Eyring at
+an absorption of 0.05, 2.3% at 0.1 and 11% at 0.3, the excess Kuttruff's correction for the
+spread of free path lengths predicts. STI uses the IEC 60268-16:2011 male weights and
+redundancies, from the impulse response alone: no background noise, speech level or
+auditory masking yet.

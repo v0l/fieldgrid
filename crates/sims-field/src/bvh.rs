@@ -108,9 +108,20 @@ impl Bvh {
     }
 
     pub fn ray(&self, origin: Point, direction: Point, skip: usize, least: f64) -> f64 {
+        self.ray_hit(origin, direction, skip, least).map_or(f64::INFINITY, |h| h.0)
+    }
+
+    pub fn ray_hit(
+        &self,
+        origin: Point,
+        direction: Point,
+        skip: usize,
+        least: f64,
+    ) -> Option<(f64, usize)> {
         let mut best = f64::INFINITY;
+        let mut which = None;
         if self.nodes.is_empty() {
-            return best;
+            return None;
         }
         let inverse = direction.map(|d| 1.0 / d);
         let mut stack = vec![0];
@@ -134,12 +145,13 @@ impl Bvh {
                             && t < best
                         {
                             best = t;
+                            which = Some(i);
                         }
                     }
                 }
             }
         }
-        best
+        which.map(|i| (best, i))
     }
 }
 

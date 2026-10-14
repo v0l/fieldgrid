@@ -1,0 +1,16 @@
+[package]
+name = "sims-acoustics"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Room acoustics by ray tracing: reverberation time, EDT, clarity, definition and STI per octave band, with air absorption by ISO 9613-1"
+
+[dependencies]
+sims-field.workspace = true
+sims-progress.workspace = true
+rayon.workspace = true
+
+[dev-dependencies]
+sims-progress.workspace = true
