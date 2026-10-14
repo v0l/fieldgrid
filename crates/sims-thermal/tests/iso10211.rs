@@ -182,3 +182,59 @@ fn case_4_iron_bar_through_insulation() {
     assert!((flow / 0.540 - 1.0).abs() <= 0.01, "{flow} W");
     assert!((hottest - 0.805).abs() <= 0.005, "{hottest}");
 }
+
+fn case_3(fine: f64) -> (Vec<f64>, f64, f64, Vec<Vec<f64>>) {
+    let x = lines(&[-0.1, 0.0, 0.05, 0.2, 1.2], fine, 1.25);
+    let y = lines(&[-0.7, -0.1, 0.0, 0.05, 0.2, 1.2], fine, 1.25);
+    let z = lines(&[0.0, 1.0, 1.15, 1.2, 2.15], fine, 1.25);
+    let block = |low: [f64; 3], high: [f64; 3], conductivity| Block { low, high, conductivity };
+    let wall = |low: [f64; 2], high: [f64; 2], conductivity| {
+        [
+            block([low[0], low[1], 0.0], [high[0], high[1], 2.15], conductivity),
+            block([low[1], low[0], 0.0], [high[1], high[0], 2.15], conductivity),
+        ]
+    };
+    let mut blocks = Vec::new();
+    blocks.extend(wall([-0.1, -0.1], [1.2, 0.0], 1.0));
+    blocks.extend(wall([0.0, 0.0], [1.2, 0.05], 0.04));
+    blocks.extend(wall([0.05, 0.05], [1.2, 0.2], 0.7));
+    blocks.push(block([0.05, -0.7, 1.0], [1.2, 1.2, 1.15], 2.5));
+    blocks.push(block([0.2, 0.2, 1.15], [1.2, 1.2, 1.2], 1.0));
+    let region = |low: [f64; 3], high: [f64; 3], environment, resistance| Boundary {
+        low,
+        high,
+        environment,
+        resistance,
+    };
+    let adiabatic = f64::INFINITY;
+    let boundaries = vec![
+        plane(0, -0.1, 0, 0.05),
+        plane(1, -0.1, 0, 0.05),
+        region([0.05, -0.7, 1.0], [1.2, -0.1, 1.15], 0, 0.05),
+        region([0.2, 0.2, 0.0], [1.2, 1.2, 1.0], 1, 0.2),
+        region([0.2, 0.2, 1.15], [1.2, 1.2, 2.15], 2, 0.2),
+        plane(0, 1.2, 0, adiabatic),
+        plane(1, 1.2, 0, adiabatic),
+        plane(2, 0.0, 0, adiabatic),
+        plane(2, 2.15, 0, adiabatic),
+    ];
+    let model = Model { grid: Grid { x, y, z }, blocks, boundaries };
+    let prepared = model.prepare().unwrap();
+    let s = prepared.solve(&[0.0, 20.0, 15.0]).unwrap();
+    let alpha = prepared.temperature(&s, [0.2, 0.2, 1.0]).unwrap();
+    let beta = prepared.temperature(&s, [0.2, 0.2, 1.2]).unwrap();
+    (s.flows, alpha, beta, prepared.coupling().unwrap())
+}
+
+#[test]
+fn case_3_corner_with_a_floor_slab() {
+    let (flows, alpha, beta, l) = case_3(0.01);
+    for (got, want) in [(-flows[0], 59.98), (flows[1], 46.09), (flows[2], 13.89)] {
+        assert!((got / want - 1.0).abs() <= 0.01, "{got} W against {want}");
+    }
+    assert!((alpha - 11.32).abs() <= 0.1, "{alpha}");
+    assert!((beta - 11.11).abs() <= 0.1, "{beta}");
+    for (i, j, want) in [(1, 0, 1.781), (2, 0, 1.624), (1, 2, 2.094)] {
+        assert!((l[i][j] / want - 1.0).abs() <= 0.01, "L{i}{j} {} against {want}", l[i][j]);
+    }
+}

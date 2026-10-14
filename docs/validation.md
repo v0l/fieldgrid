@@ -128,9 +128,14 @@ auditory masking yet.
 | 1, half square column, 28 points | within 0.005 °C of the analytic series | ISO 10211 within 0.1 °C |
 | 2, composite wall, heat flow | 9.494 W/m | 9.5 (HEAT2 9.490) |
 | 2, temperatures A to I | 7.06, 0.76, 7.90, 6.27, 0.83, 16.41, 16.33, 16.77, 18.33 °C | 7.1, 0.8, 7.9, 6.3, 0.8, 16.4, 16.3, 16.8, 18.3 |
+| 3, corner of two walls with a floor slab: heat flows to the outside, lower and upper rooms | 60.09, 46.17, 13.92 W | 59.98, 46.09, 13.89 (1%) |
+| 3, coldest point of the lower and upper room | 11.33, 11.12 °C | 11.32, 11.11 (0.1 °C) |
+| 3, coupling coefficients lower-outside, upper-outside, lower-upper | 1.785, 1.627, 2.095 W/K | 1.781, 1.624, 2.094 |
 | 4, iron bar through insulation | 0.5409 W, hottest outside point 0.8026 °C | 0.540 W (1%), 0.805 °C (0.005 °C) |
 
-Case 3 (two walls and a floor meeting in a corner) is not built yet. A slab's coupling
+Case 3's geometry follows COMSOL's implementation of it (the slab runs out 0.6 m past the
+wall as a balcony); the coldest points are the room corners at the slab, as HEAT3's points V
+and Y. A slab's coupling
 coefficient equals one over its summed resistances to 1e-6 (the grid's f32 conductances). Case 2 solved by
 conjugate gradients matches the direct solve within 1e-6 on the CPU and 0.2% on the GPU (f32).
 The gradients now apply each conductance to a temperature difference; with the diagonal held

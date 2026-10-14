@@ -80,10 +80,8 @@ thread's listener and parent stage follow the work.
 - Wind loads: `sims-flow` on building shapes, reading pressure coefficients on each face and
   the base shear and moment, checked against the CAARC standard tall building and the TPU
   aerodynamic database. Needs the wall model from the `sims-flow` list to get separation right.
-- Thermal and energy (`sims-thermal` solves steady conduction and passes ISO 10211 cases 1, 2
-  and 4). Still to do: ISO 10211 case 3 (the 3D corner with a floor, which needs the figure's
-  dimensions), ψ and χ values from the coupling coefficients, and a
-  dynamic zone model with solar gains, internal gains and ventilation for heating and cooling
+- Thermal and energy (`sims-thermal` solves steady conduction and passes all four ISO 10211
+  cases). Still to do: ψ and χ values from the coupling coefficients, and a dynamic zone model with solar gains, internal gains and ventilation for heating and cooling
   loads, checked against ASHRAE 140 (BESTEST).
 - Room acoustics (`sims-acoustics` traces rays for T20, T30, EDT, C80, D50 and STI, checked
   against Eyring, ISO 9613-1 and exponential decays). Still to do: image sources for the early
