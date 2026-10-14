@@ -118,3 +118,17 @@ an absorption of 0.05, 2.3% at 0.1 and 11% at 0.3, the excess Kuttruff's correct
 spread of free path lengths predicts. STI uses the IEC 60268-16:2011 male weights and
 redundancies, from the impulse response alone: no background noise, speech level or
 auditory masking yet.
+
+## sims-thermal
+
+`crates/sims-thermal/tests/iso10211.rs`, the ISO 10211 reference cases:
+
+| case | sims | reference |
+|---|---|---|
+| 1, half square column, 28 points | within 0.005 °C of the analytic series | ISO 10211 within 0.1 °C |
+| 2, composite wall, heat flow | 9.494 W/m | 9.5 (HEAT2 9.490) |
+| 2, temperatures A to I | 7.06, 0.76, 7.90, 6.27, 0.83, 16.41, 16.33, 16.77, 18.33 °C | 7.1, 0.8, 7.9, 6.3, 0.8, 16.4, 16.3, 16.8, 18.3 |
+| 4, iron bar through insulation | 0.5409 W, hottest outside point 0.8026 °C | 0.540 W (1%), 0.805 °C (0.005 °C) |
+
+Case 3 (two walls and a floor meeting in a corner) is not built yet. A slab's coupling
+coefficient equals one over its summed resistances to 1e-9.

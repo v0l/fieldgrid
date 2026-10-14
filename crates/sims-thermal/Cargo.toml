@@ -1,0 +1,15 @@
+[package]
+name = "sims-thermal"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "Steady heat conduction through building constructions on rectilinear grids: thermal bridges, surface temperatures, heat flows and coupling coefficients as in ISO 10211"
+
+[dependencies]
+sims-progress.workspace = true
+faer = { workspace = true, features = ["sparse-linalg"] }
+
+[dev-dependencies]
+sims-progress.workspace = true
