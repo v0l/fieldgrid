@@ -19,8 +19,17 @@ sims-tet = { path = "crates/sims-tet" }
 sims-fem = { path = "crates/sims-fem" }
 sims-flow = { path = "crates/sims-flow" }
 sims-magnetic = { path = "crates/sims-magnetic" }
+sims-antenna = { path = "crates/sims-antenna" }
+sims-propagation = { path = "crates/sims-propagation" }
+sims-hf = { path = "crates/sims-hf" }
 cgmath = { version = "0.18", features = ["serde"] }
 anyhow = "1"
+web-time = "1"
+tiff = "0.11"
+memmap2 = "0.9"
+ureq = "3"
+dirs = "6"
+ehttp = "0.7"
 bytemuck = "1.25"
 rayon = "1.11"
 wgpu = "29"

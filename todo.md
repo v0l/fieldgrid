@@ -74,14 +74,15 @@ the same rule.
   radius; a thin-wire model would let the wire radius count.
   (`antenna-toolbox/docs/validation.md`)
 
+## sims-hf and sims-propagation
+
+- P.533 (`sims-hf`): the mirror-reflection height term G omits the `90.47·xr` term the Recommendation has
+  for `xr <= 3.7` (ITURHFProp omits it too, and the port keeps it out so the two agree), and only
+  analogue circuit reliability (BCR) is reported. P.452 (`sims-propagation`) takes ΔN and N₀ by hand instead of from
+  the ITU digital maps, which may not be redistributed. (`antenna-toolbox/docs/validation.md`)
+
 ## Not in sims yet
 
-- antenna-toolbox `crates/solver`: MoM for wires and surfaces, physical optics, Sommerfeld
-  ground, characteristic modes, near field, NEC import. Its solves report through an
-  `on_progress` callback (`crates/solver/src/solve.rs`), not stages.
-- antenna-toolbox `crates/terrain` (ITM, P.452, P.528, P.2108, P.533) and `crates/rf`. Known
-  departures from the Recommendations are listed in `antenna-toolbox/docs/validation.md`:
-  P.533 omits the `90.47·xr` term of G and reports only BCR, P.452 takes ΔN and N₀ by hand.
 - agentee's event-driven logic simulator (`crates/agentee-sim/src/logic.rs`, spec types in
   `crates/agentee-core/src/logic.rs`), the same split as the circuit simulator.
 - `sims-rf` has its own `Cx` complex type; everything else uses `num-complex`, and

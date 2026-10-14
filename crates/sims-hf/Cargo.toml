@@ -1,0 +1,10 @@
+[package]
+name = "sims-hf"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "HF sky-wave propagation (ITU-R P.533) and radio noise (ITU-R P.372)"
+
+[dependencies]

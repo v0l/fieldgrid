@@ -14,6 +14,9 @@ is its own crate, so an app pulls in only what it uses.
 | `sims-magnetic` | 2D magnetostatics for motors and actuators: a slice mesher with a turning airgap, nonlinear A_z with B-H curves, torque and flux linkage |
 | `sims-circuit` | A SPICE-style circuit simulator: operating point, AC sweep, transient and noise, with diodes, BJTs, MOSFETs, op-amps and LDOs |
 | `sims-quasistatic` | 2D transmission-line cross-sections (impedance, coupling, delay), conductor and dielectric loss with roughness and ENIG, and a 3D DC conduction grid, on the GPU or the CPU |
+| `sims-antenna` | Antennas: method of moments for wires and surfaces, physical optics, Sommerfeld ground, characteristic modes, near fields, NEC decks, FDTD models from boxes and STL meshes |
+| `sims-propagation` | Radio paths over terrain: ITM (Longley-Rice), ITU-R P.452, P.528 and P.2108, elevation tiles, path profiles and coverage maps |
+| `sims-hf` | HF sky-wave circuits by ITU-R P.533, with P.372 radio noise |
 | `sims-rf` | S-parameter networks: Touchstone, joining ports, noise, stability, step and TDR responses |
 | `sims-progress` | Named progress stages that long solves report to one listener |
 
