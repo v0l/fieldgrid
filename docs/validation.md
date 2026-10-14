@@ -76,6 +76,6 @@ BJTs, MOSFETs, op-amps at their rails, LDOs, noise, a LISN against the hand calc
 ## sims-quasistatic
 
 Stripline against Cohn's exact solution within 0.5%, edge-coupled pairs within 1%, microstrip
-against Hammerstad-Jensen within 0.5% (in agentee), conductor loss against Wheeler's formula in Pozar within
-3%, the TEM dielectric loss of a homogeneous line within 0.2%, and the roughness and ENIG
-surface impedance against their published limits.
+against Hammerstad-Jensen within 0.5% (in agentee), conductor loss against Wheeler's formula in
+Pozar within 3%, the TEM dielectric loss of a homogeneous line within 0.2%, and the roughness and
+ENIG surface impedance against their published limits.
