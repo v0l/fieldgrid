@@ -70,7 +70,7 @@ The `sims-flow` validation cases (Poiseuille, the lid-driven cavity against Ghia
 heat conduction, turning walls) need a real GPU and a few minutes:
 `cargo test --release -p sims-flow --features gpu-tests`.
 
-Open work is in `todo.md`.
+What each solver is checked against is in `docs/validation.md`; open work is in `todo.md`.
 
 ## Licence
 
