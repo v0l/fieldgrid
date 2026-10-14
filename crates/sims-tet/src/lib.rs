@@ -543,6 +543,18 @@ fn shed_flat_caps(dt: &mut Delaunay, tags: &mut HashMap<[u32; 3], usize>) {
             if walls.is_empty() || walls.len() == 4 {
                 continue;
             }
+            let q = dt.coords(tet);
+            let outward = |i: usize| -> Vector3 {
+                let f = face_of(tet, i).map(|v| p3(dt.points[v as usize]));
+                let n = (f[1] - f[0]).cross(f[2] - f[0]);
+                let n = if n.dot(f[0] - p3(q[i])) < 0.0 { -n } else { n };
+                n.normalize()
+            };
+            let before: Vector3 =
+                walls.iter().map(|&(i, _)| outward(i)).sum::<Vector3>().normalize();
+            if others.iter().any(|&(i, _)| (-outward(i)).dot(before) < 0.9) {
+                continue;
+            }
             if others.iter().any(|&(i, _)| {
                 let n = dt.adj[t][i];
                 n == NONE || !dt.inside[n as usize]
