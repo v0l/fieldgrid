@@ -8,4 +8,5 @@ repository.workspace = true
 description = "Complex S-parameter networks: Touchstone, joins, noise, stability, step and TDR responses"
 
 [dependencies]
+num-complex.workspace = true
 serde.workspace = true

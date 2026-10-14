@@ -1,82 +1,11 @@
-use std::ops::{Add, Div, Mul, Neg, Sub};
+pub use num_complex::Complex64 as Cx;
 
-#[derive(Clone, Copy, Debug, Default, PartialEq)]
-pub struct Cx {
-    pub re: f64,
-    pub im: f64,
+pub fn polar(mag: f64, deg: f64) -> Cx {
+    Cx::from_polar(mag, deg.to_radians())
 }
 
-impl Cx {
-    pub const ZERO: Cx = Cx { re: 0.0, im: 0.0 };
-    pub const ONE: Cx = Cx { re: 1.0, im: 0.0 };
-
-    pub fn new(re: f64, im: f64) -> Cx {
-        Cx { re, im }
-    }
-
-    pub fn polar(mag: f64, deg: f64) -> Cx {
-        let a = deg.to_radians();
-        Cx::new(mag * a.cos(), mag * a.sin())
-    }
-
-    pub fn norm2(self) -> f64 {
-        self.re * self.re + self.im * self.im
-    }
-
-    pub fn abs(self) -> f64 {
-        self.norm2().sqrt()
-    }
-
-    pub fn conj(self) -> Cx {
-        Cx::new(self.re, -self.im)
-    }
-
-    pub fn db(self) -> f64 {
-        10.0 * self.norm2().max(1e-30).log10()
-    }
-}
-
-impl Add for Cx {
-    type Output = Cx;
-    fn add(self, o: Cx) -> Cx {
-        Cx::new(self.re + o.re, self.im + o.im)
-    }
-}
-
-impl Sub for Cx {
-    type Output = Cx;
-    fn sub(self, o: Cx) -> Cx {
-        Cx::new(self.re - o.re, self.im - o.im)
-    }
-}
-
-impl Mul for Cx {
-    type Output = Cx;
-    fn mul(self, o: Cx) -> Cx {
-        Cx::new(self.re * o.re - self.im * o.im, self.re * o.im + self.im * o.re)
-    }
-}
-
-impl Mul<f64> for Cx {
-    type Output = Cx;
-    fn mul(self, k: f64) -> Cx {
-        Cx::new(self.re * k, self.im * k)
-    }
-}
-
-impl Div for Cx {
-    type Output = Cx;
-    fn div(self, o: Cx) -> Cx {
-        let d = o.norm2();
-        Cx::new((self.re * o.re + self.im * o.im) / d, (self.im * o.re - self.re * o.im) / d)
-    }
-}
-
-impl Neg for Cx {
-    type Output = Cx;
-    fn neg(self) -> Cx {
-        Cx::new(-self.re, -self.im)
-    }
+pub fn db(z: Cx) -> f64 {
+    10.0 * z.norm_sqr().max(1e-30).log10()
 }
 
 pub type Matrix = Vec<Vec<Cx>>;
@@ -193,8 +122,8 @@ pub fn parse_touchstone(text: &str, ports: usize) -> Result<Network, String> {
             let (a, b) = (rec[1 + 2 * k], rec[2 + 2 * k]);
             match format.as_str() {
                 "RI" => Cx::new(a, b),
-                "DB" => Cx::polar(10f64.powf(a / 20.0), b),
-                _ => Cx::polar(a, b),
+                "DB" => polar(10f64.powf(a / 20.0), b),
+                _ => polar(a, b),
             }
         };
         let m: Matrix = (0..ports)
@@ -219,7 +148,7 @@ pub fn parse_touchstone(text: &str, ports: usize) -> Result<Network, String> {
                 rec[0] * scale,
                 NoiseParams {
                     fmin: 10f64.powf(rec[1] / 10.0),
-                    gamma_opt: Cx::polar(rec[2], rec[3]),
+                    gamma_opt: polar(rec[2], rec[3]),
                     rn: rec[4] * z0,
                 },
             ));
@@ -272,8 +201,8 @@ pub fn ports_from_path(path: &std::path::Path) -> Option<usize> {
 pub fn solve(mut a: Matrix, mut b: Matrix) -> Option<Matrix> {
     let n = a.len();
     for c in 0..n {
-        let p = (c..n).max_by(|x, y| a[*x][c].norm2().total_cmp(&a[*y][c].norm2()))?;
-        if a[p][c].norm2() < 1e-300 {
+        let p = (c..n).max_by(|x, y| a[*x][c].norm_sqr().total_cmp(&a[*y][c].norm_sqr()))?;
+        if a[p][c].norm_sqr() < 1e-300 {
             return None;
         }
         a.swap(c, p);
@@ -288,16 +217,16 @@ pub fn solve(mut a: Matrix, mut b: Matrix) -> Option<Matrix> {
             }
             let (pivot_a, pivot_b) = (a[c].clone(), b[c].clone());
             for (x, v) in a[r].iter_mut().zip(&pivot_a).skip(c) {
-                *x = *x - k * *v;
+                *x -= k * *v;
             }
             for (x, v) in b[r].iter_mut().zip(&pivot_b) {
-                *x = *x - k * *v;
+                *x -= k * *v;
             }
         }
     }
     for (r, row) in b.iter_mut().enumerate() {
         let d = a[r][r];
-        row.iter_mut().for_each(|x| *x = *x / d);
+        row.iter_mut().for_each(|x| *x /= d);
     }
     Some(b)
 }
@@ -361,7 +290,7 @@ pub fn active_noise(s: &Matrix, np: NoiseParams, z0: f64) -> Option<Matrix> {
     let cvi = (Cx::new((np.fmin - 1.0) / 2.0, 0.0) - yopt.conj() * np.rn) * k4;
     let ca = vec![
         vec![Cx::new(np.rn * k4, 0.0), cvi],
-        vec![cvi.conj(), Cx::new(np.rn * yopt.norm2() * k4, 0.0)],
+        vec![cvi.conj(), Cx::new(np.rn * yopt.norm_sqr() * k4, 0.0)],
     ];
     let mut t = vec![vec![Cx::ZERO; 2]; 2];
     for src in 0..2 {
@@ -383,7 +312,7 @@ pub fn active_noise(s: &Matrix, np: NoiseParams, z0: f64) -> Option<Matrix> {
 }
 
 pub fn noise_figure(s21: Cx, c22: f64) -> f64 {
-    1.0 + c22 / (K_B * T0 * s21.norm2())
+    1.0 + c22 / (K_B * T0 * s21.norm_sqr())
 }
 
 pub fn join(s: &Matrix, pairs: &[(usize, usize)]) -> Option<Joined> {
@@ -458,11 +387,12 @@ pub struct Stability {
 pub fn stability(s: &Matrix) -> Stability {
     let (s11, s12, s21, s22) = (s[0][0], s[0][1], s[1][0], s[1][1]);
     let delta = s11 * s22 - s12 * s21;
-    let loop_gain = (s12 * s21).abs();
-    let k = (1.0 - s11.norm2() - s22.norm2() + delta.norm2()) / (2.0 * loop_gain.max(1e-30));
-    let mu = (1.0 - s11.norm2()) / ((s22 - delta * s11.conj()).abs() + loop_gain);
-    let mu_prime = (1.0 - s22.norm2()) / ((s11 - delta * s22.conj()).abs() + loop_gain);
-    Stability { k, delta: delta.abs(), mu, mu_prime }
+    let loop_gain = (s12 * s21).norm();
+    let k =
+        (1.0 - s11.norm_sqr() - s22.norm_sqr() + delta.norm_sqr()) / (2.0 * loop_gain.max(1e-30));
+    let mu = (1.0 - s11.norm_sqr()) / ((s22 - delta * s11.conj()).norm() + loop_gain);
+    let mu_prime = (1.0 - s22.norm_sqr()) / ((s11 - delta * s22.conj()).norm() + loop_gain);
+    Stability { k, delta: delta.norm(), mu, mu_prime }
 }
 
 pub fn max_gain_db(s: &Matrix) -> Option<f64> {
@@ -470,7 +400,7 @@ pub fn max_gain_db(s: &Matrix) -> Option<f64> {
     if st.k < 1.0 {
         return None;
     }
-    let ratio = s[1][0].abs() / s[0][1].abs().max(1e-30);
+    let ratio = s[1][0].norm() / s[0][1].norm().max(1e-30);
     Some(10.0 * (ratio * (st.k - (st.k * st.k - 1.0).sqrt())).log10())
 }
 
@@ -479,7 +409,7 @@ mod tests {
     use super::*;
 
     fn close(a: Cx, b: Cx) -> bool {
-        (a - b).abs() < 1e-12
+        (a - b).norm() < 1e-12
     }
 
     #[test]
@@ -488,9 +418,9 @@ mod tests {
             "! x\n# MHZ S DB R 50\n100 -10 0  20 90  -30 0  -15 45\n200 -11 0 19 80 -31 0 -16 40\n";
         let n = parse_touchstone(t, 2).unwrap();
         assert_eq!(n.freqs, vec![1e8, 2e8]);
-        assert!((n.s[0][1][0].db() - 20.0).abs() < 1e-9);
-        assert!((n.s[0][0][1].db() + 30.0).abs() < 1e-9);
-        assert!(close(n.s[0][1][0], Cx::polar(10.0, 90.0)));
+        assert!((db(n.s[0][1][0]) - 20.0).abs() < 1e-9);
+        assert!((db(n.s[0][0][1]) + 30.0).abs() < 1e-9);
+        assert!(close(n.s[0][1][0], polar(10.0, 90.0)));
         let mid = n.at(1.5e8).unwrap();
         assert!(close(mid[0][0], (n.s[0][0][0] + n.s[1][0][0]) * 0.5));
         assert!(n.at(3e8).is_none());
@@ -522,7 +452,7 @@ mod tests {
             let shunt = vec![vec![shunt_s11, shunt_s21], vec![shunt_s21, shunt_s11]];
             for (m, mount) in [(series, Mount::Series), (shunt, Mount::Shunt)] {
                 let back = impedance(&m, z0, mount);
-                assert!((back - z).abs() / z.abs() < 1e-9, "{mount:?} {z:?} {back:?}");
+                assert!((back - z).norm() / z.norm() < 1e-9, "{mount:?} {z:?} {back:?}");
             }
         }
     }
@@ -531,24 +461,24 @@ mod tests {
     fn fixture_line_length_on_both_sides_cancels() {
         let z = Cx::new(40.0, 700.0);
         let r = Cx::new(50.0, 0.0);
-        let line = Cx::polar(1.0, -2.0 * 37.0);
+        let line = polar(1.0, -2.0 * 37.0);
         let s11 = -r / (z * 2.0 + r) * line;
         let s21 = z * 2.0 / (z * 2.0 + r) * line;
         let m = vec![vec![s11, s21], vec![s21, s11]];
-        assert!((impedance(&m, 50.0, Mount::Shunt) - z).abs() < 1e-9);
+        assert!((impedance(&m, 50.0, Mount::Shunt) - z).norm() < 1e-9);
         let zs = Cx::new(0.3, 5.0);
         let s11 = zs / (zs + r * 2.0) * line;
         let s21 = r * 2.0 / (zs + r * 2.0) * line;
         let m = vec![vec![s11, s21], vec![s21, s11]];
-        assert!((impedance(&m, 50.0, Mount::Series) - zs).abs() < 1e-9);
+        assert!((impedance(&m, 50.0, Mount::Series) - zs).norm() < 1e-9);
     }
 
     #[test]
     fn thru_lines_hand_the_device_through_unchanged() {
         let thru = vec![vec![Cx::ZERO, Cx::ONE], vec![Cx::ONE, Cx::ZERO]];
         let dev = vec![
-            vec![Cx::polar(0.3, -40.0), Cx::polar(0.05, 20.0)],
-            vec![Cx::polar(8.0, 120.0), Cx::polar(0.4, -70.0)],
+            vec![polar(0.3, -40.0), polar(0.05, 20.0)],
+            vec![polar(8.0, 120.0), polar(0.4, -70.0)],
         ];
         let all = block_diag(&[&thru, &dev, &thru]);
         let (s, ext) = connect(&all, &[(1, 2), (3, 4)]).unwrap();
@@ -581,22 +511,21 @@ mod tests {
     #[test]
     fn a_device_behind_a_lossless_mismatch_follows_the_noise_parameter_formula() {
         let dev = vec![
-            vec![Cx::polar(0.35, -60.0), Cx::polar(0.04, 30.0)],
-            vec![Cx::polar(6.0, 110.0), Cx::polar(0.3, -40.0)],
+            vec![polar(0.35, -60.0), polar(0.04, 30.0)],
+            vec![polar(6.0, 110.0), polar(0.3, -40.0)],
         ];
-        let np = NoiseParams { fmin: 10f64.powf(0.06), gamma_opt: Cx::polar(0.45, 70.0), rn: 12.0 };
+        let np = NoiseParams { fmin: 10f64.powf(0.06), gamma_opt: polar(0.45, 70.0), rn: 12.0 };
         let cd = active_noise(&dev, np, 50.0).unwrap();
         let f50 = noise_figure(dev[1][0], cd[1][1].re);
-        let want50 =
-            np.fmin + 4.0 * np.rn / 50.0 * np.gamma_opt.norm2() / (Cx::ONE + np.gamma_opt).norm2();
+        let want50 = np.fmin
+            + 4.0 * np.rn / 50.0 * np.gamma_opt.norm_sqr() / (Cx::ONE + np.gamma_opt).norm_sqr();
         assert!((f50 - want50).abs() < 1e-9, "{f50} {want50}");
         for (b, deg) in [(0.4, 30.0), (1.2, -80.0), (0.05, 170.0)] {
             let y = Cx::new(0.0, b);
             let den = y + Cx::new(2.0, 0.0);
             let (s11, s21) = (-y / den, Cx::new(2.0, 0.0) / den);
             let shunt = vec![vec![s11, s21], vec![s21, s11]];
-            let line =
-                vec![vec![Cx::ZERO, Cx::polar(1.0, deg)], vec![Cx::polar(1.0, deg), Cx::ZERO]];
+            let line = vec![vec![Cx::ZERO, polar(1.0, deg)], vec![polar(1.0, deg), Cx::ZERO]];
             let (m, _) = connect(&block_diag(&[&shunt, &line]), &[(1, 2)]).unwrap();
             let all = block_diag(&[&m, &dev]);
             let mut cs = vec![vec![Cx::ZERO; 4]; 4];
@@ -608,8 +537,8 @@ mod tests {
             let f = noise_out(&all, &cs, &[(1, 2)]);
             let gs = m[1][1];
             let want = np.fmin
-                + 4.0 * np.rn / 50.0 * (gs - np.gamma_opt).norm2()
-                    / ((1.0 - gs.norm2()) * (Cx::ONE + np.gamma_opt).norm2());
+                + 4.0 * np.rn / 50.0 * (gs - np.gamma_opt).norm_sqr()
+                    / ((1.0 - gs.norm_sqr()) * (Cx::ONE + np.gamma_opt).norm_sqr());
             assert!((f - want).abs() < 1e-9, "{f} {want} at {gs:?}");
         }
     }
@@ -638,14 +567,14 @@ mod tests {
         let a = 10f64.powf(-3.0 / 20.0);
         let pad = vec![vec![Cx::ZERO, Cx::new(a, 0.0)], vec![Cx::new(a, 0.0), Cx::ZERO]];
         let (s, _) = connect(&block_diag(&[&pad, &pad]), &[(1, 2)]).unwrap();
-        assert!((s[1][0].db() + 6.0).abs() < 1e-9);
-        assert!(s[0][0].abs() < 1e-12);
+        assert!((db(s[1][0]) + 6.0).abs() < 1e-9);
+        assert!(s[0][0].norm() < 1e-12);
     }
 
     #[test]
     fn a_mismatch_between_two_lines_matches_the_series_formula() {
         let g = Cx::new(0.2, 0.1);
-        let t = Cx::polar(0.9, -30.0);
+        let t = polar(0.9, -30.0);
         let step = vec![vec![g, t], vec![t, -g]];
         let (s, _) = connect(&block_diag(&[&step, &step]), &[(1, 2)]).unwrap();
         let s21 = t * t / (Cx::ONE - (-g) * g);
@@ -663,7 +592,7 @@ mod tests {
         };
         let mut both = [0usize; 2];
         for _ in 0..20000 {
-            let mut c = |m: f64| Cx::polar(m * rnd(), 360.0 * rnd());
+            let mut c = |m: f64| polar(m * rnd(), 360.0 * rnd());
             let s = vec![vec![c(1.0), c(0.3)], vec![c(10.0), c(1.0)]];
             let st = stability(&s);
             let rollett = st.k > 1.0 && st.delta < 1.0;

@@ -99,14 +99,14 @@ fn metal_layer(load: Option<Cx>, rho: f64, mu: Cx, d: f64, s: Cx) -> Cx {
 }
 
 pub fn csqrt(z: Cx) -> Cx {
-    let m = z.abs();
+    let m = z.norm();
     let re = ((m + z.re) / 2.0).max(0.0).sqrt();
     let im = ((m - z.re) / 2.0).max(0.0).sqrt();
     Cx::new(re, if z.im < 0.0 { -im } else { im })
 }
 
 fn cln(z: Cx) -> Cx {
-    Cx::new(z.abs().ln(), z.im.atan2(z.re))
+    Cx::new(z.norm().ln(), z.im.atan2(z.re))
 }
 
 fn ctanh(z: Cx) -> Cx {
@@ -389,14 +389,14 @@ mod tests {
             let cu = csqrt(s(f) * (MU0 * COPPER));
             let bare = Enig { nickel_um: 0.0, gold_um: 0.0 };
             let z = surface_impedance(Face::Enig(bare), 1e-3, s(f));
-            assert!((z - cu).abs() / cu.abs() < 1e-9, "{f}");
+            assert!((z - cu).norm() / cu.norm() < 1e-9, "{f}");
             let thick = Enig { nickel_um: 1000.0, gold_um: 0.0 };
             let ni = csqrt(s(f) * nickel_permeability(s(f)) * (MU0 * NICKEL));
             let z = surface_impedance(Face::Enig(thick), 1e-3, s(f));
-            assert!((z - ni).abs() / ni.abs() < 1e-9, "{f}");
+            assert!((z - ni).norm() / ni.norm() < 1e-9, "{f}");
             let rough = Roughness { rms_um: Some(2.0), ..Default::default() };
             let z = surface_impedance(Face::Copper(rough), 1e-3, s(f));
-            assert!((z - cu * rough.causal(s(f))).abs() / cu.abs() < 1e-9);
+            assert!((z - cu * rough.causal(s(f))).norm() / cu.norm() < 1e-9);
         }
         let dc = surface_impedance(Face::Copper(Roughness::default()), 35e-6, s(1.0));
         assert!((dc.re / (COPPER / 35e-6) - 1.0).abs() < 1e-6, "{dc:?}");

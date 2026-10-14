@@ -111,7 +111,7 @@ pub fn passivity(s: &Matrix) -> f64 {
     for _ in 0..200 {
         let w: Vec<Cx> =
             (0..n).map(|i| (0..n).fold(Cx::ZERO, |a, j| a + ss[i][j] * v[j])).collect();
-        let norm = w.iter().map(|c| c.norm2()).sum::<f64>().sqrt();
+        let norm = w.iter().map(|c| c.norm_sqr()).sum::<f64>().sqrt();
         if norm < 1e-300 {
             return 0.0;
         }
@@ -125,7 +125,7 @@ pub fn reciprocity(s: &Matrix) -> f64 {
     let n = s.len();
     (0..n)
         .flat_map(|i| (i + 1..n).map(move |j| (i, j)))
-        .map(|(i, j)| (s[i][j] - s[j][i]).abs())
+        .map(|(i, j)| (s[i][j] - s[j][i]).norm())
         .fold(0.0, f64::max)
 }
 
@@ -164,9 +164,9 @@ mod tests {
         let z = Cx::ZERO;
         let s = vec![vec![r, z, t, z], vec![z, r, z, t], vec![t, z, r, z], vec![z, t, z, r]];
         let m = mixed_mode(&s, [0, 2], [1, 3]);
-        assert!((m[1][0] - t).abs() < 1e-12);
-        assert!((m[3][2] - t).abs() < 1e-12);
-        assert!(m[3][0].abs() < 1e-12 && m[1][2].abs() < 1e-12);
+        assert!((m[1][0] - t).norm() < 1e-12);
+        assert!((m[3][2] - t).norm() < 1e-12);
+        assert!(m[3][0].norm() < 1e-12 && m[1][2].norm() < 1e-12);
         assert!((passivity(&s) - 1.0).abs() < 1e-9);
         assert!(reciprocity(&s) < 1e-12);
     }
