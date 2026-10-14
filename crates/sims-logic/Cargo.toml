@@ -1,0 +1,12 @@
+[package]
+name = "sims-logic"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "An event-driven digital logic simulator: four-level nets, gates, flip-flops, counters, shift registers, timing checks, assertions and VCD output"
+
+[dependencies]
+serde.workspace = true
+sims-progress.workspace = true

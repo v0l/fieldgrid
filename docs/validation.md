@@ -79,3 +79,10 @@ Stripline against Cohn's exact solution within 0.5%, edge-coupled pairs within 1
 against Hammerstad-Jensen within 0.5% (in agentee), conductor loss against Wheeler's formula in
 Pozar within 3%, the TEM dielectric loss of a homogeneous line within 0.2%, and the roughness and
 ENIG surface impedance against their published limits.
+
+## sims-logic
+
+`crates/sims-logic/src/engine.rs`: every primitive against its truth table, unknowns that
+propagate only when they decide the output, strong drivers over weak and contention, setup,
+hold, recovery and removal against the clock, and VCD buses grouped as the viewer shows them.
+agentee's `crates/agentee-sim/tests/logic.rs` runs its counter and I2C examples from schematics.

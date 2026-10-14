@@ -83,7 +83,5 @@ the same rule.
 
 ## Not in sims yet
 
-- agentee's event-driven logic simulator (`crates/agentee-sim/src/logic.rs`, spec types in
-  `crates/agentee-core/src/logic.rs`), the same split as the circuit simulator.
 - `sims-rf` has its own `Cx` complex type; everything else uses `num-complex`, and
   antenna-toolbox `crates/rf` keeps its own network maths.
