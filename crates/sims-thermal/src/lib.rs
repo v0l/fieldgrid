@@ -1,4 +1,6 @@
-use faer::linalg::solvers::Solve;
+pub mod nodal;
+
+use sims_field::Gpu;
 
 #[derive(Clone, Debug, PartialEq)]
 pub struct Grid {
@@ -25,7 +27,7 @@ impl Grid {
     }
 
     fn index(&self, p: [usize; 3]) -> usize {
-        (p[2] * self.y.len() + p[1]) * self.x.len() + p[0]
+        (p[0] * self.y.len() + p[1]) * self.z.len() + p[2]
     }
 }
 
@@ -87,16 +89,12 @@ pub struct Solution {
 
 pub struct Prepared {
     grid: Grid,
-    edges: Vec<(usize, usize, f64)>,
+    problem: nodal::Problem,
     films: Vec<(usize, usize, f64)>,
-    fixed: Vec<Vec<usize>>,
-    index: Vec<usize>,
-    order: Vec<usize>,
-    factor: Option<faer::sparse::linalg::solvers::Llt<usize, f64>>,
+    fixed: Vec<(usize, Vec<usize>)>,
+    connected: Vec<bool>,
     environments: usize,
 }
-
-const NONE: usize = usize::MAX;
 
 fn inside(p: f64, lo: f64, hi: f64) -> bool {
     p >= lo.min(hi) - 1e-12 && p <= lo.max(hi) + 1e-12
@@ -112,20 +110,20 @@ impl Model {
     }
 
     pub fn prepare(&self) -> Result<Prepared, String> {
-        let _stage = sims_progress::stage("factoring the conduction grid", None, "");
         let g = &self.grid;
         let n = g.nodes();
         if n.iter().any(|c| *c < 2) {
             return Err("the grid needs at least two lines along each axis".into());
         }
         let total = n[0] * n[1] * n[2];
-        let mut edges: std::collections::HashMap<(usize, usize), f64> = Default::default();
         let cells = [n[0] - 1, n[1] - 1, n[2] - 1];
         let cell = |c: [usize; 3]| (c[2] * cells[1] + c[1]) * cells[0] + c[0];
         let mut lambdas = vec![0.0; cells[0] * cells[1] * cells[2]];
-        for k in 0..n[2] - 1 {
-            for j in 0..n[1] - 1 {
-                for i in 0..n[0] - 1 {
+        let mut along = [vec![0.0f64; total], vec![0.0f64; total], vec![0.0f64; total]];
+        let mut connected = vec![false; total];
+        for k in 0..cells[2] {
+            for j in 0..cells[1] {
+                for i in 0..cells[0] {
                     let d = [g.x[i + 1] - g.x[i], g.y[j + 1] - g.y[j], g.z[k + 1] - g.z[k]];
                     let centre = [
                         (g.x[i] + g.x[i + 1]) / 2.0,
@@ -139,15 +137,16 @@ impl Model {
                     }
                     for a in 0..3 {
                         let (u, v) = ((a + 1) % 3, (a + 2) % 3);
-                        let g4 = lambda * d[u] * d[v] / (4.0 * d[a]);
+                        let quarter = lambda * d[u] * d[v] / (4.0 * d[a]);
                         for su in 0..2 {
                             for sv in 0..2 {
                                 let mut p = [i, j, k];
                                 p[u] += su;
                                 p[v] += sv;
-                                let mut q = p;
-                                q[a] += 1;
-                                *edges.entry((g.index(p), g.index(q))).or_default() += g4;
+                                along[a][g.index(p)] += quarter;
+                                connected[g.index(p)] = true;
+                                p[a] += 1;
+                                connected[g.index(p)] = true;
                             }
                         }
                     }
@@ -219,63 +218,24 @@ impl Model {
                 }
             }
         }
-        let mut connected = vec![false; total];
-        for (a, b) in edges.keys() {
-            connected[*a] = true;
-            connected[*b] = true;
-        }
-        let mut index = vec![NONE; total];
-        let mut order = Vec::new();
-        for i in 0..total {
-            if connected[i] && fixed_by[i].is_empty() {
-                index[i] = order.len();
-                order.push(i);
-            }
-        }
-        let mut lower: std::collections::HashMap<(usize, usize), f64> = Default::default();
-        for ((a, b), w) in &edges {
-            for (p, q) in [(*a, *b), (*b, *a)] {
-                if index[p] != NONE {
-                    *lower.entry((index[p], index[p])).or_default() += w;
-                    if index[q] != NONE && index[q] < index[p] {
-                        *lower.entry((index[p], index[q])).or_default() -= w;
-                    }
-                }
-            }
-        }
-        for ((node, _), w) in &films {
-            if index[*node] != NONE {
-                *lower.entry((index[*node], index[*node])).or_default() += w;
-            }
-        }
-        let m = order.len();
-        let factor = if m > 0 {
-            let triplets: Vec<faer::sparse::Triplet<usize, usize, f64>> =
-                lower.into_iter().map(|((r, c), v)| faer::sparse::Triplet::new(r, c, v)).collect();
-            let a =
-                faer::sparse::SparseColMat::<usize, f64>::try_new_from_triplets(m, m, &triplets)
-                    .map_err(|e| format!("{e:?}"))?;
-            Some(a.sp_cholesky(faer::Side::Lower).map_err(|_| {
-                "part of the construction touches no boundary with a temperature".to_string()
-            })?)
-        } else {
-            None
-        };
+        let mut problem = nodal::Problem::new(n);
+        let [gx, gy, gz] = along;
+        problem.gx = gx.into_iter().map(|v| v as f32).collect();
+        problem.gy = gy.into_iter().map(|v| v as f32).collect();
+        problem.gz = gz.into_iter().map(|v| v as f32).collect();
         Ok(Prepared {
             grid: g.clone(),
-            edges: edges.into_iter().map(|((a, b), w)| (a, b, w)).collect(),
-            films: films.into_iter().map(|((n, e), w)| (n, e, w)).collect(),
-            fixed: fixed_by,
-            index,
-            order,
-            factor,
+            problem,
+            films: films.into_iter().map(|((node, e), w)| (node, e, w)).collect(),
+            fixed: fixed_by.into_iter().enumerate().filter(|(_, e)| !e.is_empty()).collect(),
+            connected,
             environments,
         })
     }
 }
 
 impl Prepared {
-    pub fn solve(&self, temperatures: &[f64]) -> Result<Solution, String> {
+    fn problem(&self, temperatures: &[f64]) -> Result<nodal::Problem, String> {
         if temperatures.len() < self.environments {
             return Err(format!(
                 "the boundaries name {} environments but {} temperatures were given",
@@ -283,54 +243,83 @@ impl Prepared {
                 temperatures.len()
             ));
         }
-        let _stage = sims_progress::stage("solving the conduction grid", None, "");
-        let total = self.index.len();
-        let mut t = vec![f64::NAN; total];
-        for (i, envs) in self.fixed.iter().enumerate() {
-            if !envs.is_empty() {
-                t[i] = envs.iter().map(|e| temperatures[*e]).sum::<f64>() / envs.len() as f64;
-            }
+        let mut p = nodal::Problem::new(self.problem.n);
+        p.gx.clone_from(&self.problem.gx);
+        p.gy.clone_from(&self.problem.gy);
+        p.gz.clone_from(&self.problem.gz);
+        let mut g0 = vec![0.0f64; p.len()];
+        let mut source = vec![0.0f64; p.len()];
+        for (node, env, w) in &self.films {
+            g0[*node] += w;
+            source[*node] += w * temperatures[*env];
         }
-        let m = self.order.len();
-        if let Some(factor) = &self.factor {
-            let mut b = faer::Mat::<f64>::zeros(m, 1);
-            for (node, env, w) in &self.films {
-                if self.index[*node] != NONE {
-                    b[(self.index[*node], 0)] += w * temperatures[*env];
-                }
-            }
-            for (p, q, w) in &self.edges {
-                for (a, c) in [(*p, *q), (*q, *p)] {
-                    if self.index[a] != NONE && !self.fixed[c].is_empty() {
-                        b[(self.index[a], 0)] += w * t[c];
-                    }
-                }
-            }
-            let x = factor.solve(&b);
-            for (k, node) in self.order.iter().enumerate() {
-                t[*node] = x[(k, 0)];
-            }
+        p.g0 = g0.into_iter().map(|v| v as f32).collect();
+        p.source = source.into_iter().map(|v| v as f32).collect();
+        for (node, envs) in &self.fixed {
+            let t = envs.iter().map(|e| temperatures[*e]).sum::<f64>() / envs.len() as f64;
+            p.fixed[*node] = Some(t as f32);
         }
+        Ok(p)
+    }
+
+    fn finish(
+        &self,
+        temperatures: &[f64],
+        problem: &nodal::Problem,
+        s: nodal::Solution,
+    ) -> Solution {
+        let t: Vec<f64> = (0..problem.len())
+            .map(|i| match problem.fixed[i] {
+                Some(v) => v as f64,
+                None if self.connected[i] => s.delta[i],
+                None => f64::NAN,
+            })
+            .collect();
         let mut flows = vec![0.0; self.environments.max(temperatures.len())];
         for (node, env, w) in &self.films {
-            if !t[*node].is_nan() {
-                flows[*env] += w * (temperatures[*env] - t[*node]);
-            }
+            flows[*env] += w * (temperatures[*env] - t[*node]);
         }
-        let mut out = vec![0.0; total];
-        for (p, q, w) in &self.edges {
-            if t[*p].is_nan() || t[*q].is_nan() {
-                continue;
+        let [nx, ny, nz] = problem.n;
+        let stride = [ny * nz, nz, 1];
+        let dims = [nx, ny, nz];
+        for (node, envs) in &self.fixed {
+            let p = [node / stride[0], node / stride[1] % ny, node % nz];
+            let mut out = 0.0;
+            for (a, g) in [&problem.gx, &problem.gy, &problem.gz].into_iter().enumerate() {
+                if p[a] + 1 < dims[a] {
+                    out += g[*node] as f64 * (t[*node] - t[node + stride[a]]);
+                }
+                if p[a] > 0 {
+                    out += g[node - stride[a]] as f64 * (t[*node] - t[node - stride[a]]);
+                }
             }
-            out[*p] += w * (t[*p] - t[*q]);
-            out[*q] += w * (t[*q] - t[*p]);
-        }
-        for (i, envs) in self.fixed.iter().enumerate() {
             for e in envs {
-                flows[*e] += out[i] / envs.len() as f64;
+                flows[*e] += out / envs.len() as f64;
             }
         }
-        Ok(Solution { temperature: t, flows })
+        Solution { temperature: t, flows }
+    }
+
+    pub fn solve(&self, temperatures: &[f64]) -> Result<Solution, String> {
+        let problem = self.problem(temperatures)?;
+        let s = problem.solve_direct().map_err(|_| {
+            "part of the construction touches no boundary with a temperature".to_string()
+        })?;
+        Ok(self.finish(temperatures, &problem, s))
+    }
+
+    pub fn solve_iterative(
+        &self,
+        temperatures: &[f64],
+        gpu: Option<&Gpu>,
+        tolerance: f64,
+    ) -> Result<Solution, String> {
+        let problem = self.problem(temperatures)?;
+        let s = problem.solve(gpu, tolerance, 100 * problem.len().max(1000));
+        if s.residual.is_nan() || s.residual > tolerance {
+            return Err(format!("the solve stopped at a residual of {:.1e}", s.residual));
+        }
+        Ok(self.finish(temperatures, &problem, s))
     }
 
     pub fn coupling(&self) -> Result<Vec<Vec<f64>>, String> {

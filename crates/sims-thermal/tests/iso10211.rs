@@ -79,7 +79,13 @@ fn case_2_composite_wall() {
     let prepared = model.prepare().unwrap();
     let s = prepared.solve(&[0.0, 20.0]).unwrap();
     assert!((s.flows[1] - 9.5).abs() <= 0.1, "{} W/m", s.flows[1]);
-    assert!((s.flows[0] + s.flows[1]).abs() < 1e-9 * s.flows[1]);
+    let iterated = prepared.solve_iterative(&[0.0, 20.0], None, 1e-10).unwrap();
+    assert!((iterated.flows[1] / s.flows[1] - 1.0).abs() < 1e-6, "{} W/m", iterated.flows[1]);
+    if let Ok(gpu) = sims_field::Gpu::open_blocking(&Default::default()) {
+        let g = prepared.solve_iterative(&[0.0, 20.0], Some(&gpu), 1e-6).unwrap();
+        assert!((g.flows[1] / s.flows[1] - 1.0).abs() < 2e-3, "{} W/m on {}", g.flows[1], gpu.name);
+    }
+    assert!((s.flows[0] + s.flows[1]).abs() < 1e-6 * s.flows[1]);
     for (name, x, y, want) in [
         ("A", 0.0, 47.5, 7.1),
         ("B", 500.0, 47.5, 0.8),
@@ -119,7 +125,7 @@ fn coupling_coefficients_of_a_slab_add_its_resistances() {
     let l = model.prepare().unwrap().coupling().unwrap();
     let u = 1.0 / (0.13 + 0.2 / 0.04 + 0.04);
     for (i, j, want) in [(0, 0, u), (1, 1, u), (0, 1, u), (1, 0, u)] {
-        assert!((l[i][j] - want).abs() < 1e-9, "{l:?}");
+        assert!((l[i][j] / want - 1.0).abs() < 1e-6, "{l:?}");
     }
 }
 

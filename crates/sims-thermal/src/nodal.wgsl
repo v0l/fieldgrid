@@ -22,6 +22,7 @@ struct Params {
 @group(0) @binding(10) var<storage, read_write> scalars: array<f32>;
 @group(0) @binding(11) var<storage, read> free: array<u32>;
 @group(0) @binding(12) var<storage, read> links: array<f32>;
+@group(0) @binding(13) var<storage, read> ground: array<f32>;
 
 var<workgroup> sa: array<f32, 256>;
 var<workgroup> sb: array<f32, 256>;
@@ -39,13 +40,14 @@ fn apply(@builtin(global_invocation_id) g: vec3<u32>) {
     let k = id % P.nz;
     let j = (id / P.nz) % P.ny;
     let i = id / sx;
-    var s = diag[id] * p[id];
-    if i + 1u < P.nx { s -= gx[id] * p[id + sx] * f32(free[id + sx]); }
-    if i > 0u { s -= gx[id - sx] * p[id - sx] * f32(free[id - sx]); }
-    if j + 1u < P.ny { s -= gy[id] * p[id + sy] * f32(free[id + sy]); }
-    if j > 0u { s -= gy[id - sy] * p[id - sy] * f32(free[id - sy]); }
-    if k + 1u < P.nz { s -= gz[id] * p[id + 1u] * f32(free[id + 1u]); }
-    if k > 0u { s -= gz[id - 1u] * p[id - 1u] * f32(free[id - 1u]); }
+    let here = p[id];
+    var s = ground[id] * here;
+    if i + 1u < P.nx { s += max(gx[id], 0.0) * f32(free[id + sx]) * (here - p[id + sx]); }
+    if i > 0u { s += max(gx[id - sx], 0.0) * f32(free[id - sx]) * (here - p[id - sx]); }
+    if j + 1u < P.ny { s += max(gy[id], 0.0) * f32(free[id + sy]) * (here - p[id + sy]); }
+    if j > 0u { s += max(gy[id - sy], 0.0) * f32(free[id - sy]) * (here - p[id - sy]); }
+    if k + 1u < P.nz { s += max(gz[id], 0.0) * f32(free[id + 1u]) * (here - p[id + 1u]); }
+    if k > 0u { s += max(gz[id - 1u], 0.0) * f32(free[id - 1u]) * (here - p[id - 1u]); }
     ap[id] = s;
 }
 
@@ -160,7 +162,7 @@ fn apply_links() {
         let a = u32(links[l * 3u]);
         let b = u32(links[l * 3u + 1u]);
         let g = links[l * 3u + 2u];
-        ap[a] -= g * p[b];
-        ap[b] -= g * p[a];
+        ap[a] += g * (p[a] - p[b]);
+        ap[b] += g * (p[b] - p[a]);
     }
 }

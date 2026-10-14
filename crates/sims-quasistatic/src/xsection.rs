@@ -705,4 +705,16 @@ mod tests {
         let b = solve_gpu(d, &g, false, 1e-8);
         assert!((a.sum - b.sum).abs() / a.sum < 1e-3, "{} {}", a.sum, b.sum);
     }
+
+    #[test]
+    fn solving_reports_its_iterations() {
+        let seen = std::sync::Arc::new(std::sync::Mutex::new(Vec::new()));
+        let into = seen.clone();
+        let listening =
+            sims_progress::listen_here_to_all(move |r| into.lock().unwrap().push(r.stage.clone()));
+        line_raw(0.3e-3, 0.2e-3, 35e-6, 4.3, None).expect("solves");
+        drop(listening);
+        let seen = seen.lock().unwrap();
+        assert!(seen.iter().any(|s| s == "solving the cross-section"), "{seen:?}");
+    }
 }

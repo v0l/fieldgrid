@@ -1,3 +1,3 @@
 pub mod loss;
-pub mod nodal;
+pub use sims_thermal::nodal;
 pub mod xsection;

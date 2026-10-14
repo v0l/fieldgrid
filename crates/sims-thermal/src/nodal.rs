@@ -83,41 +83,39 @@ impl Problem {
         v
     }
 
-    fn system(&self) -> (Vec<f32>, Vec<u32>, Vec<f32>) {
+    fn system(&self) -> (Vec<f32>, Vec<u32>, Vec<f32>, Vec<f64>) {
         let len = self.len();
         let extra = self.extra();
         let mut diag = vec![0f32; len];
         let mut free = vec![0u32; len];
         let mut b = vec![0f32; len];
+        let mut ground = vec![0f64; len];
         for id in 0..len {
             if self.fixed[id].is_some() {
                 continue;
             }
             let o = self.off(id);
             let mut d = self.g0[id] as f64;
+            let mut held = self.g0[id] as f64;
             let mut rhs = self.source[id] as f64 + self.g0[id] as f64 * (self.reference as f64 - o);
-            for (nb, g) in &extra[id] {
-                d += *g as f64;
-                if let Some(v) = self.fixed[*nb] {
-                    rhs += *g as f64 * (v as f64 - o);
-                }
-            }
-            for (nb, g) in self.neighbours(id) {
+            for (nb, g) in extra[id].iter().copied().chain(self.neighbours(id)) {
                 if g <= 0.0 {
                     continue;
                 }
                 d += g as f64;
                 if let Some(v) = self.fixed[nb] {
                     rhs += g as f64 * (v as f64 - o);
+                    held += g as f64;
                 }
             }
             if d > 0.0 {
                 diag[id] = d as f32;
                 free[id] = 1;
                 b[id] = rhs as f32;
+                ground[id] = held;
             }
         }
-        (diag, free, b)
+        (diag, free, b, ground)
     }
 
     fn finish(&self, x: &[f32]) -> Vec<f32> {
@@ -136,6 +134,7 @@ impl Problem {
 
     pub fn solve_direct(&self) -> Result<Solution, String> {
         use faer::linalg::solvers::Solve;
+        let _stage = sims_progress::stage("solving the conduction grid", None, "");
         let len = self.len();
         let extra = self.extra();
         let mut index = vec![usize::MAX; len];
@@ -206,7 +205,7 @@ impl Problem {
     }
 
     pub fn solve_cpu(&self, tol: f64, max_iter: usize) -> Solution {
-        let (diag, free, b) = self.system();
+        let (diag, free, b, ground) = self.system();
         let len = self.len();
         let extra = self.extra();
         let apply = |v: &[f64]| -> Vec<f64> {
@@ -215,10 +214,10 @@ impl Problem {
                     if free[id] == 0 {
                         return v[id];
                     }
-                    let mut s = diag[id] as f64 * v[id];
+                    let mut s = ground[id] * v[id];
                     for (nb, g) in self.neighbours(id).chain(extra[id].iter().copied()) {
-                        if free[nb] == 1 {
-                            s -= g as f64 * v[nb];
+                        if free[nb] == 1 && g > 0.0 {
+                            s += g as f64 * (v[id] - v[nb]);
                         }
                     }
                     s
@@ -269,7 +268,8 @@ impl Problem {
 
     #[cfg(not(target_arch = "wasm32"))]
     pub fn solve_gpu(&self, g: &Gpu, tol: f64, max_iter: usize) -> Solution {
-        let (diag, free, b) = self.system();
+        let (diag, free, b, ground) = self.system();
+        let ground: Vec<f32> = ground.iter().map(|v| *v as f32).collect();
         let n = self.len();
         let groups = n.div_ceil(256).clamp(1, 1024) as u32;
         let z: Vec<f32> =
@@ -320,11 +320,12 @@ impl Problem {
         let b_scalars =
             g.storage("scalars", &[rz0 as f32, 0.0, 0.0, 0.0, rr0 as f32, 0.0, 0.0, 0.0]);
         let b_free = g.storage("free", &free);
+        let b_ground = g.storage("ground", &ground);
         let module = g.device.create_shader_module(wgpu::ShaderModuleDescriptor {
             label: Some("nodal"),
             source: wgpu::ShaderSource::Wgsl(include_str!("nodal.wgsl").into()),
         });
-        let all: [(u32, &wgpu::Buffer); 13] = [
+        let all: [(u32, &wgpu::Buffer); 14] = [
             (0, &b_params),
             (1, &b_gx),
             (2, &b_gy),
@@ -338,6 +339,7 @@ impl Problem {
             (10, &b_scalars),
             (11, &b_free),
             (12, &b_links),
+            (13, &b_ground),
         ];
         let make = |entry: &str, uses: &[u32]| {
             let pipe = g.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -366,7 +368,7 @@ impl Problem {
         let wg = n.div_ceil(256) as u32;
         let flat = [wg.min(65535), wg.div_ceil(65535), 1];
         let steps = [
-            (make("apply", &[0, 1, 2, 3, 4, 7, 8, 11]), flat),
+            (make("apply", &[0, 1, 2, 3, 7, 8, 11, 13]), flat),
             (make("apply_links", &[0, 7, 8, 12]), [1, 1, 1]),
             (make("dot_pap", &[0, 7, 8, 9]), [groups, 1, 1]),
             (make("reduce_alpha", &[0, 9, 10]), [1, 1, 1]),
@@ -518,10 +520,8 @@ mod tests {
         let listening =
             sims_progress::listen_here_to_all(move |r| into.lock().unwrap().push(r.stage.clone()));
         bar(8).solve_cpu(1e-8, 1000);
-        crate::xsection::line_raw(0.3e-3, 0.2e-3, 35e-6, 4.3, None).expect("solves");
         drop(listening);
         let seen = seen.lock().unwrap();
         assert!(seen.iter().any(|s| s == "solving the conduction grid"), "{seen:?}");
-        assert!(seen.iter().any(|s| s == "solving the cross-section"), "{seen:?}");
     }
 }

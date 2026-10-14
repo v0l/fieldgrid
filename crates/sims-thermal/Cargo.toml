@@ -8,8 +8,12 @@ repository.workspace = true
 description = "Steady heat conduction through building constructions on rectilinear grids: thermal bridges, surface temperatures, heat flows and coupling coefficients as in ISO 10211"
 
 [dependencies]
+sims-field.workspace = true
 sims-progress.workspace = true
+bytemuck = { workspace = true, features = ["derive"] }
+wgpu.workspace = true
 faer = { workspace = true, features = ["sparse-linalg"] }
 
 [dev-dependencies]
 sims-progress.workspace = true
+sims-field.workspace = true

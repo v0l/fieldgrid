@@ -24,6 +24,7 @@ sims-propagation = { path = "crates/sims-propagation" }
 sims-hf = { path = "crates/sims-hf" }
 sims-logic = { path = "crates/sims-logic" }
 sims-frame = { path = "crates/sims-frame" }
+sims-thermal = { path = "crates/sims-thermal" }
 cgmath = { version = "0.18", features = ["serde"] }
 anyhow = "1"
 web-time = "1"

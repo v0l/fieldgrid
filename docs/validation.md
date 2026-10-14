@@ -131,4 +131,8 @@ auditory masking yet.
 | 4, iron bar through insulation | 0.5409 W, hottest outside point 0.8026 °C | 0.540 W (1%), 0.805 °C (0.005 °C) |
 
 Case 3 (two walls and a floor meeting in a corner) is not built yet. A slab's coupling
-coefficient equals one over its summed resistances to 1e-9.
+coefficient equals one over its summed resistances to 1e-6 (the grid's f32 conductances). Case 2 solved by
+conjugate gradients matches the direct solve within 1e-6 on the CPU and 0.2% on the GPU (f32).
+The gradients now apply each conductance to a temperature difference; with the diagonal held
+in f32, as before, a node between aluminium and insulation leaked to ground and case 2 read
+9.77 W/m.
