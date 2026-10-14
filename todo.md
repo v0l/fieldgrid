@@ -13,9 +13,9 @@ a test that listens and checks for its stages (`a_run_reports_its_time_steps`,
 `a_run_reports_its_analyses`, `meshing_and_solving_report_progress`). New solvers follow
 the same rule.
 
-- A listener is global (`listen`) or for one thread (`listen_here`). Stages opened on
-  rayon workers reach only the global one, so an app that runs several solves at once on its
-  own threads (the agentee viewer) loses those.
+- A listener is global (`listen`) or for one thread (`listen_here`). A stage opened on a
+  rayon worker reaches only the global one: `field::solve` in `sims-magnetic`, run inside
+  gcad's parallel pose sweep, is one.
 - `sims-quasistatic`, `sims-flow` and `sims-magnetic` use delayed stages, so their tests do
   not see them on the small cases they run; they have no progress test.
 
