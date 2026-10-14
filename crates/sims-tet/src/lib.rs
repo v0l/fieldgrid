@@ -107,6 +107,25 @@ fn bounds(points: &[Point3]) -> (Point3, Point3) {
     (low, high)
 }
 
+#[derive(Debug, Clone, Copy)]
+pub struct Unrecoverable {
+    pub at: Point3,
+    pub fewest: usize,
+    pub now: usize,
+}
+
+impl std::fmt::Display for Unrecoverable {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        write!(
+            f,
+            "the surface cannot be recovered near {:.3},{:.3},{:.3}: splitting the {} missing triangles only makes more ({} now), which happens where two faces nearly touch or cross; check for a wall thinner than the mesh size there",
+            self.at.x, self.at.y, self.at.z, self.fewest, self.now
+        )
+    }
+}
+
+impl std::error::Error for Unrecoverable {}
+
 const RATIO: f64 = 2.0;
 const SLIVER: f64 = 10.0;
 
@@ -131,6 +150,9 @@ pub fn fill<S: Surface + Clone>(mut surface: SurfaceMesh<S>, size: f64) -> Resul
         id[i] = place(&mut dt, surface.points[i])?;
     }
     let start = surface.points.len();
+    let mut fewest = usize::MAX;
+    let mut growing = 0;
+    let mut first_missing: Option<Point3> = None;
     for round in 0.. {
         let faces = dt.faces();
         let missing: Vec<usize> = (0..surface.triangles.len())
@@ -138,6 +160,20 @@ pub fn fill<S: Surface + Clone>(mut surface: SurfaceMesh<S>, size: f64) -> Resul
             .collect();
         if missing.is_empty() {
             break;
+        }
+        let near = |t: usize| {
+            let [a, b, c] = surface.triangles[t].map(|v| surface.points[v as usize]);
+            Point3::new((a.x + b.x + c.x) / 3.0, (a.y + b.y + c.y) / 3.0, (a.z + b.z + c.z) / 3.0)
+        };
+        let at = *first_missing.get_or_insert_with(|| near(missing[0]));
+        if missing.len() < fewest {
+            fewest = missing.len();
+            growing = 0;
+        } else {
+            growing += 1;
+        }
+        if growing >= 4 && missing.len() > 2 * fewest {
+            return Err(Unrecoverable { at, fewest, now: missing.len() }.into());
         }
         report(format!(
             "recovering the surface, round {}, {} triangles missing",
