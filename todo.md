@@ -44,13 +44,6 @@ thread's listener and parent stage follow the work.
 
 ## sims-fem
 
-- Parts bond wherever they come within a tenth of their element size, so a cover with a
-  small clearance is glued to the part it covers: in `~/git/rotator/sims/rotator.gsim`
-  `cover_el` bonds to `wheel_el` at 29,830 nodes and `cover_az` to `wheel_az` at 5,049, and
-  the solve goes from 592 to 1,372 iterations (that the clearance is what gets bridged is
-  unverified; measure the gap in `parts/gearcover.gcad`). Bond only faces that touch, or take
-  a list of bonded pairs. The distance is set in `gcad/src/sim/statics.rs`, the bonding is
-  `merge` in `crates/sims-fem/src/lib.rs`. (gcad TODO)
 - The static solve runs on the CPU only; a GPU solve waits on a multigrid preconditioner.
   (`gcad/docs/simulation.md`, phase 3)
 

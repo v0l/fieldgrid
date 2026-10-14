@@ -17,6 +17,9 @@ pub const STRIDE: usize = 1 << 20;
 const DISTORTION: f64 = 0.05;
 
 const SLIP: f64 = 0.1;
+const TOUCH: f64 = 0.05;
+
+pub type OnSurface<'a> = &'a (dyn Fn(usize, usize, u32, Point3) -> Option<f64> + Sync);
 
 #[derive(Clone, Copy, Debug)]
 pub struct Tie {
@@ -517,9 +520,12 @@ pub fn merge(
     gaps: &[f64],
     touching: &[(usize, usize, f64)],
     rows: &[Row],
+    exact: OnSurface,
 ) -> anyhow::Result<Quadratic> {
     let mut out = Quadratic::empty();
     let mut skins: Vec<Vec<[u32; 6]>> = Vec::new();
+    let mut tags: Vec<Vec<usize>> = Vec::new();
+    let mut offsets: Vec<u32> = Vec::new();
     for (index, (name, part)) in parts.into_iter().enumerate() {
         let offset = out.nodes.len() as u32;
         out.nodes.extend(part.nodes);
@@ -534,6 +540,8 @@ pub fn merge(
         out.faces = out.faces.max(index * STRIDE + part.faces);
         out.bodies.push(name);
         skins.push(skin);
+        tags.push(part.boundary.iter().map(|(_, tag)| *tag).collect());
+        offsets.push(offset);
     }
     use rayon::prelude::*;
     let nodes = &out.nodes;
@@ -670,6 +678,13 @@ pub fn merge(
                             (d <= gap && along <= gap * SLIP).then_some((d, t, l))
                         })
                         .min_by(|a, b| a.0.total_cmp(&b.0));
+                    let plain = contact.is_none() && row.is_none();
+                    let best = best.filter(|&(_, t, _)| {
+                        let corner = skins[master][t][0] - offsets[master];
+                        !plain
+                            || exact(master, tags[master][t], corner, p)
+                                .is_none_or(|d| d <= gap * TOUCH)
+                    });
                     if let Some((_, t, l)) = best {
                         let (along, seat) = match row {
                             Some(i) => {
