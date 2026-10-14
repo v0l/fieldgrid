@@ -289,6 +289,7 @@ pub fn fill<S: Surface + Clone>(mut surface: SurfaceMesh<S>, size: f64) -> Resul
     let mut mesh = finish(&dt, &tags, &skin)?;
     mesh.smooth(4);
     mesh.flip(6);
+    mesh.smooth_skin(4);
     mesh.smooth(4);
     Ok(mesh)
 }
@@ -699,6 +700,159 @@ pub fn mean_ratio(q: [Point; 4]) -> f64 {
         .map(|(i, j)| sub(q[i], q[j]).magnitude2())
         .sum();
     12.0 * (3.0 * volume).powf(2.0 / 3.0) / squares
+}
+
+impl<S: Surface> TetMesh<S> {
+    pub fn smooth_skin(&mut self, passes: usize) {
+        let mut star: Vec<Vec<u32>> = vec![Vec::new(); self.nodes.len()];
+        for (t, tet) in self.tets.iter().enumerate() {
+            for &v in tet {
+                star[v as usize].push(t as u32);
+            }
+        }
+        let mut tags: HashMap<u32, Vec<usize>> = HashMap::default();
+        let mut ring: HashMap<u32, HashSet<u32>> = HashMap::default();
+        for (face, tag) in &self.boundary {
+            for k in 0..3 {
+                let list = tags.entry(face[k]).or_default();
+                if !list.contains(tag) {
+                    list.push(*tag);
+                }
+                let around = ring.entry(face[k]).or_default();
+                around.insert(face[(k + 1) % 3]);
+                around.insert(face[(k + 2) % 3]);
+            }
+        }
+        tags.values_mut().for_each(|list| list.sort_unstable());
+        let mut nodes: Vec<u32> = tags.keys().copied().filter(|v| tags[v].len() <= 2).collect();
+        nodes.sort_unstable();
+        let worst = |nodes: &[Point3], v: u32, at: Point3| -> f64 {
+            star[v as usize]
+                .iter()
+                .map(|&t| {
+                    mean_ratio(self.tets[t as usize].map(|u| {
+                        let p = if u == v { at } else { nodes[u as usize] };
+                        [p.x, p.y, p.z]
+                    }))
+                })
+                .fold(f64::INFINITY, f64::min)
+        };
+        for _ in 0..passes {
+            let mut moved = 0;
+            for &v in &nodes {
+                let home = self.nodes[v as usize];
+                let before = worst(&self.nodes, v, home);
+                if before > 0.3 {
+                    continue;
+                }
+                let own = &tags[&v];
+                let around: Vec<u32> = match own[..] {
+                    [_] => ring[&v].iter().copied().collect(),
+                    _ => ring[&v].iter().copied().filter(|u| tags.get(u) == Some(own)).collect(),
+                };
+                if around.len() < 2 {
+                    continue;
+                }
+                let reach = around
+                    .iter()
+                    .map(|&u| (self.nodes[u as usize] - home).magnitude())
+                    .fold(f64::INFINITY, f64::min);
+                let mut uvs: Vec<(usize, Vector2)> = Vec::new();
+                for &tag in own {
+                    let known = self
+                        .uvs
+                        .get(&v)
+                        .and_then(|list| list.iter().find(|(f, _)| *f == tag))
+                        .map(|(_, uv)| *uv);
+                    let surface = &self.surfaces[tag];
+                    let Some(uv) = known.or_else(|| {
+                        let uv = surface.nearest(home, None)?;
+                        ((surface.at(uv)? - home).magnitude() < reach * 0.01).then_some(uv)
+                    }) else {
+                        break;
+                    };
+                    uvs.push((tag, uv));
+                }
+                if uvs.len() != own.len() {
+                    continue;
+                }
+                let centre =
+                    around.iter().map(|&u| self.nodes[u as usize].to_vec()).sum::<Vector3>()
+                        / around.len() as f64;
+                let place = |target: Point3| -> Option<(Point3, Vec<(usize, Vector2)>)> {
+                    let mut p = target;
+                    let mut found = uvs.clone();
+                    for _ in 0..if found.len() == 1 { 1 } else { 8 } {
+                        for (tag, uv) in found.iter_mut() {
+                            let surface = &self.surfaces[*tag];
+                            *uv = surface.nearest(p, Some(*uv))?;
+                            p = surface.at(*uv)?;
+                        }
+                    }
+                    let off = found
+                        .iter()
+                        .map(|(tag, uv)| {
+                            self.surfaces[*tag]
+                                .at(*uv)
+                                .map_or(f64::INFINITY, |q| (q - p).magnitude())
+                        })
+                        .fold(0.0, f64::max);
+                    (off < reach * 1.0e-3).then_some((p, found))
+                };
+                let mut best: Option<(f64, Point3, Vec<(usize, Vector2)>)> = None;
+                for w in [1.0, 0.5, 0.25, 0.125] {
+                    let Some((at, found)) = place(home + (Point3::from_vec(centre) - home) * w)
+                    else {
+                        continue;
+                    };
+                    let after = worst(&self.nodes, v, at);
+                    if after > best.as_ref().map_or(before, |b| b.0) + 1.0e-6 {
+                        best = Some((after, at, found));
+                    }
+                }
+                let axes = [
+                    Vector3::unit_x(),
+                    -Vector3::unit_x(),
+                    Vector3::unit_y(),
+                    -Vector3::unit_y(),
+                    Vector3::unit_z(),
+                    -Vector3::unit_z(),
+                ];
+                let mut step = reach * 0.2;
+                for _ in 0..10 {
+                    let from = best.as_ref().map_or(home, |b| b.1);
+                    let mut improved = false;
+                    for axis in axes {
+                        let Some((at, found)) = place(from + axis * step) else {
+                            continue;
+                        };
+                        let after = worst(&self.nodes, v, at);
+                        if after > best.as_ref().map_or(before, |b| b.0) + 1.0e-9 {
+                            best = Some((after, at, found));
+                            improved = true;
+                        }
+                    }
+                    if !improved {
+                        step *= 0.5;
+                    }
+                }
+                if let Some((_, at, found)) = best {
+                    self.nodes[v as usize] = at;
+                    let list = self.uvs.entry(v).or_default();
+                    for (tag, uv) in found {
+                        match list.iter_mut().find(|(f, _)| *f == tag) {
+                            Some(entry) => entry.1 = uv,
+                            None => list.push((tag, uv)),
+                        }
+                    }
+                    moved += 1;
+                }
+            }
+            if moved == 0 {
+                break;
+            }
+        }
+    }
 }
 
 impl<S> TetMesh<S> {
