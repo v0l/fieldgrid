@@ -152,6 +152,52 @@ pub fn listen_here_to_all(sink: impl Fn(&Report) + Send + Sync + 'static) -> Lis
     ListeningHere(before)
 }
 
+thread_local! {
+    static INHERITED: std::cell::RefCell<Option<String>> = const { std::cell::RefCell::new(None) };
+}
+
+#[derive(Clone)]
+pub struct Carry {
+    here: Option<(Sink, bool)>,
+    parent: Option<String>,
+}
+
+pub fn carry() -> Carry {
+    let thread = std::thread::current().id();
+    let open = OPEN.lock().unwrap_or_else(|e| e.into_inner());
+    let parent = open
+        .iter()
+        .find(|o| o.thread == thread)
+        .map(|o| o.name.clone())
+        .or_else(|| INHERITED.with(|i| i.borrow().clone()));
+    Carry { here: HERE.with(|here| here.borrow().clone()), parent }
+}
+
+pub struct Carried {
+    here: Option<Option<(Sink, bool)>>,
+    parent: Option<String>,
+}
+
+impl Carry {
+    pub fn enter(&self) -> Carried {
+        let here =
+            self.here.clone().map(|listener| HERE.with(|here| here.borrow_mut().replace(listener)));
+        let parent =
+            INHERITED.with(|i| std::mem::replace(&mut *i.borrow_mut(), self.parent.clone()));
+        Carried { here, parent }
+    }
+}
+
+impl Drop for Carried {
+    fn drop(&mut self) {
+        if let Some(before) = self.here.take() {
+            HERE.with(|here| *here.borrow_mut() = before);
+        }
+        let parent = self.parent.take();
+        INHERITED.with(|i| *i.borrow_mut() = parent);
+    }
+}
+
 fn listener() -> Option<(Sink, bool, bool)> {
     HERE.with(|here| here.borrow().clone()).map(|(s, every)| (s, every, true)).or_else(|| {
         SINK.read().unwrap_or_else(|e| e.into_inner()).clone().map(|s| (s, false, false))
@@ -230,8 +276,9 @@ pub fn stage_after(
         let parent = open
             .iter()
             .find(|o| o.thread == thread)
-            .or_else(|| open.iter().find(|o| !scoped && !o.scoped))
-            .map(|o| o.name.clone());
+            .map(|o| o.name.clone())
+            .or_else(|| INHERITED.with(|i| i.borrow().clone()))
+            .or_else(|| open.iter().find(|o| !scoped && !o.scoped).map(|o| o.name.clone()));
         open.push(Open { id, thread, scoped, name: name.clone() });
         parent
     };
@@ -418,6 +465,28 @@ mod tests {
         let seen = seen.lock().unwrap();
         let inner = seen.iter().find(|r| r.stage == "solving the field").unwrap();
         assert_eq!(inner.parent.as_deref(), Some("sweeping poses"));
+    }
+
+    #[test]
+    fn a_carried_listener_hears_worker_stages_under_their_run() {
+        let seen: Arc<Mutex<Vec<Report>>> = Arc::default();
+        let into = seen.clone();
+        {
+            let _listening = listen_here(move |r| into.lock().unwrap().push(r.clone()));
+            let _outer = stage("sweeping poses", None, "");
+            let carried = carry();
+            std::thread::spawn(move || {
+                let _in = carried.enter();
+                drop(stage("solving the field", None, ""));
+            })
+            .join()
+            .unwrap();
+            std::thread::spawn(|| drop(stage("uncarried", None, ""))).join().unwrap();
+        }
+        let seen = seen.lock().unwrap();
+        let inner = seen.iter().find(|r| r.stage == "solving the field").unwrap();
+        assert_eq!(inner.parent.as_deref(), Some("sweeping poses"));
+        assert!(!seen.iter().any(|r| r.stage == "uncarried"));
     }
 
     #[test]

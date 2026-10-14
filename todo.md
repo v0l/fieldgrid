@@ -12,11 +12,10 @@ Every solver entry point that can run longer than a moment reports through `sims
 a test that listens and checks for its stages (`a_run_reports_its_time_steps`,
 `a_run_reports_its_analyses`, `meshing_and_solving_report_progress`); tests of delayed stages
 listen with `listen_here_to_all`, which hears them from their start. New solvers follow the
-same rule.
+same rule. A listener is global (`listen`) or for one thread (`listen_here`); code that opens
+stages inside rayon workers takes `carry()` before and `enter()`s it in each worker, so a
+thread's listener and parent stage follow the work.
 
-- A listener is global (`listen`) or for one thread (`listen_here`). A stage opened on a
-  rayon worker reaches only the global one, so a thread-scoped listener (agentee's viewer)
-  misses `field::solve` in `sims-magnetic` when it runs inside gcad's parallel pose sweep.
 
 ## sims-flow
 
@@ -73,8 +72,3 @@ same rule.
   for `xr <= 3.7` (ITURHFProp omits it too, and the port keeps it out so the two agree), and only
   analogue circuit reliability (BCR) is reported. P.452 (`sims-propagation`) takes ΔN and N₀ by hand instead of from
   the ITU digital maps, which may not be redistributed. (`antenna-toolbox/docs/validation.md`)
-
-## Not in sims yet
-
-- `sims-rf` has its own `Cx` complex type; everything else uses `num-complex`, and
-  antenna-toolbox `crates/rf` keeps its own network maths.
