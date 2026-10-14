@@ -98,3 +98,90 @@ fn a_run_reports_its_analyses() {
         assert!(stages.iter().any(|s| s == want), "{want} missing from {stages:?}");
     }
 }
+
+fn follower(slew: f64, wave: Wave, dc: f64) -> CircuitSpec {
+    let opamp = ElemKind::Opamp {
+        gain: 1e5,
+        gbw: 10e6,
+        rout: 1.0,
+        vos: 0.0,
+        en: 0.0,
+        fc: 0.0,
+        headroom_high: 0.0,
+        headroom_low: 0.0,
+        slew,
+        ib: 0.0,
+        psrr: 0.0,
+    };
+    CircuitSpec {
+        schematic: "follower".into(),
+        nets: vec!["in".into(), "out".into(), "vp".into()],
+        elements: vec![Elem {
+            name: "U1".into(),
+            kind: opamp,
+            nodes: vec![Some(0), Some(1), Some(1), Some(2), None],
+        }],
+        drives: vec![
+            Drive {
+                net: "in".into(),
+                p: Some(0),
+                n: None,
+                current: false,
+                dc,
+                ac: 0.0,
+                r: 0.0,
+                wave,
+            },
+            Drive {
+                net: "vp".into(),
+                p: Some(2),
+                n: None,
+                current: false,
+                dc: 10.0,
+                ac: 0.0,
+                r: 0.0,
+                wave: Wave::Dc,
+            },
+        ],
+        ac: None,
+        tran: None,
+        noise: None,
+        checks: Vec::new(),
+        record: vec![1],
+        temperature: 27.0,
+        netlist_hash: 0,
+    }
+}
+
+fn at(res: &sims_circuit::CircuitResult, t: f64) -> f64 {
+    let k = res.times.iter().position(|s| *s >= t).unwrap();
+    res.waves[0].values[k]
+}
+
+#[test]
+fn a_slew_limited_follower_ramps_at_its_slew_rate() {
+    let step = Wave::Pulse {
+        low: 2.0,
+        high: 7.0,
+        delay: 1e-6,
+        rise: 1e-8,
+        fall: 1e-8,
+        width: 1.0,
+        period: 2.0,
+    };
+    let mut spec = follower(1e6, step, 2.0);
+    spec.tran = Some((10e-6, 2e-8));
+    let res = run(&spec, "slew", 0);
+    assert!(res.failures.is_empty(), "{:?}", res.failures);
+    let rate = (at(&res, 5e-6) - at(&res, 3e-6)) / 2e-6;
+    assert!((rate / 1e6 - 1.0).abs() < 0.005, "{} V/us", rate / 1e6);
+}
+
+#[test]
+fn a_follower_tracks_inside_its_rails_and_clips_at_them() {
+    for (input, want) in [(1.0, 1.0), (5.0, 5.0), (8.5, 8.5), (12.0, 10.0), (-2.0, 0.0)] {
+        let res = run(&follower(0.0, Wave::Dc, input), "follower", 0);
+        let out = res.op["out"];
+        assert!((out - want).abs() < 0.02, "{input} V in, {out} V out");
+    }
+}

@@ -65,12 +65,6 @@ the same rule.
 
 ## sims-circuit
 
-- The op-amp output stage is a tanh soft clip about mid-rail, so its slope is under 1 well
-  inside the rails: a 1 V/us slew limited follower ramps at 0.97 V/us between 3 and 6 V on
-  10 V rails (`Unit::Buffer` in `crates/sims-circuit/src/solve.rs`). (agentee TODO)
-- The operating point does not converge for two op-amp integrators diode-ORed onto one node
-  with the CC loop idle (agentee ubench `main-psu-cc` with ISET 0.46 V); starting from a
-  gate-off state with steps works. (agentee TODO)
 - No varistor element, so a MOV clamp cannot be modelled, and no IEC 61000-4-5 combination
   wave (1.2/50 us, 8/20 us) or 61000-4-4 burst drive. (agentee TODO)
 - No conducted-emission readout (a LISN and dBuV from 150 kHz to 30 MHz against CISPR 11),

@@ -64,6 +64,16 @@ struct Integrator {
     room: (f64, f64),
 }
 
+const KNEE: f64 = 0.8;
+
+fn clip(u: f64) -> (f64, f64) {
+    if u.abs() <= KNEE {
+        return (u, 1.0);
+    }
+    let t = ((u.abs() - KNEE) / (1.0 - KNEE)).tanh();
+    (u.signum() * (KNEE + (1.0 - KNEE) * t), 1.0 - t * t)
+}
+
 fn swing(hi: f64, lo: f64, room: (f64, f64)) -> (f64, f64) {
     let (top, bot) = (hi - room.0, lo + room.1);
     ((top + bot) / 2.0, (top - bot) / 2.0)
@@ -556,13 +566,13 @@ impl Net {
                         ((hi + lo) / 2.0, 0.0, 0.5, 0.5)
                     } else {
                         let u = (vi - mid) / half;
-                        let t = u.tanh();
-                        let dh = t - u * (1.0 - t * t);
+                        let (t, slope) = clip(u);
+                        let dh = t - u * slope;
                         (
                             mid + half * t,
-                            1.0 - t * t,
-                            t * t / 2.0 + dh / 2.0,
-                            t * t / 2.0 - dh / 2.0,
+                            slope,
+                            (1.0 - slope) / 2.0 + dh / 2.0,
+                            (1.0 - slope) / 2.0 - dh / 2.0,
                         )
                     };
                     s.add(Some(j), input, -d1);
