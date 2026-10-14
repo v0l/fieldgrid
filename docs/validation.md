@@ -95,3 +95,14 @@ ENIG surface impedance against their published limits.
 propagate only when they decide the output, strong drivers over weak and contention, setup,
 hold, recovery and removal against the clock, and VCD buses grouped as the viewer shows them.
 agentee's `crates/agentee-sim/tests/logic.rs` runs its counter and I2C examples from schematics.
+
+## sims-frame
+
+`crates/sims-frame/tests/frame.rs`: a cantilever's tip deflection both ways and its twist, a
+simply supported beam under a uniform load and the same beam made of fixed members with pinned
+ends, all to 1e-9 of the beam formulas; a fixed portal's sway within 0.2% of slope deflection
+(the rest is the columns' axial give); Euler's load for a pinned and a cantilevered column and
+a cantilever's first two bending frequencies within 1e-4 on ten and twenty elements. A
+three-storey, two-by-two-bay concrete frame with floor masses matches OpenSees
+(`elasticBeamColumn`, `tools/opensees_frame.py`) within 1e-6 on displacements, a base moment
+and the first six periods.

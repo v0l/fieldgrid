@@ -1,0 +1,18 @@
+[package]
+name = "sims-frame"
+version.workspace = true
+edition.workspace = true
+rust-version.workspace = true
+license.workspace = true
+repository.workspace = true
+description = "3D frame analysis for buildings and structures: beam-column elements with end releases, load cases and combinations, self weight, natural modes and linear buckling"
+
+[dependencies]
+sims-progress.workspace = true
+faer = { workspace = true, features = ["sparse-linalg"] }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
+faer = { workspace = true, features = ["sparse-linalg", "rayon"] }
+
+[dev-dependencies]
+sims-progress.workspace = true

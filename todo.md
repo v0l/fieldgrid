@@ -71,10 +71,12 @@ thread's listener and parent stage follow the work.
 
 ## Buildings
 
-- Structural frames (`sims-frame`): 3D beam-column elements with end releases, load cases and
-  combinations, self weight, modes and linear buckling. Then storey drift, P-delta, plate and
-  shell elements for floors and walls, and a cross-check against OpenSees on a multi-storey
-  frame.
+- Structural frames (`sims-frame` has beam-columns, releases, cases, combinations, self
+  weight, modes and buckling, checked against OpenSees). Still to do: storey drift and rigid
+  floor diaphragms, P-delta, response spectrum analysis, shear deformation (Timoshenko) for
+  deep members, and plate and shell elements for floors and walls. Modes and buckling use a
+  dense eigensolver and stop at 8000 free degrees of freedom; a building larger than that
+  needs a sparse one (Lanczos or subspace iteration).
 - Wind loads: `sims-flow` on building shapes, reading pressure coefficients on each face and
   the base shear and moment, checked against the CAARC standard tall building and the TPU
   aerodynamic database. Needs the wall model from the `sims-flow` list to get separation right.

@@ -11,6 +11,7 @@ is its own crate, so an app pulls in only what it uses.
 | `sims-flow` | A GPU lattice Boltzmann solver for air: D3Q19 with LES, coupled D3Q7 heat, turning rotors, drag and surface pressure on voxelised parts |
 | `sims-fem` | Quadratic tetrahedral finite elements: elastic statics with contact, friction and bonded parts, heat conduction, modal (LOBPCG) and buckling analysis |
 | `sims-tet` | Delaunay tetrahedral meshing of a closed surface mesh: boundary recovery, quality refinement, sliver removal, flips and smoothing |
+| `sims-frame` | 3D frames for buildings and structures: beam-columns with end releases, load cases and combinations, self weight, modes and linear buckling |
 | `sims-logic` | Event-driven digital logic: four-level nets, gates, flip-flops, counters, shift registers, setup/hold/recovery checks, assertions and VCD |
 | `sims-magnetic` | 2D magnetostatics for motors and actuators: a slice mesher with a turning airgap, nonlinear A_z with B-H curves, torque and flux linkage |
 | `sims-circuit` | A SPICE-style circuit simulator: operating point, AC sweep, transient and noise, with diodes, BJTs, MOSFETs, op-amps and LDOs |

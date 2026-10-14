@@ -23,6 +23,7 @@ sims-antenna = { path = "crates/sims-antenna" }
 sims-propagation = { path = "crates/sims-propagation" }
 sims-hf = { path = "crates/sims-hf" }
 sims-logic = { path = "crates/sims-logic" }
+sims-frame = { path = "crates/sims-frame" }
 cgmath = { version = "0.18", features = ["serde"] }
 anyhow = "1"
 web-time = "1"
