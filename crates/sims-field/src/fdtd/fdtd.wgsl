@@ -24,7 +24,7 @@ struct Params {
     patches: u32,
     debye: u32,
     wide: u32,
-    pad2: u32,
+    wires: u32,
     pad3: u32,
 }
 
@@ -55,6 +55,7 @@ struct Params {
 @group(1) @binding(11) var<storage, read_write> debye_edge: array<f32>;
 @group(1) @binding(12) var<storage, read> debye_table: array<f32>;
 @group(1) @binding(13) var<storage, read_write> debye_state: array<f32>;
+@group(1) @binding(14) var<storage, read> wire: array<u32>;
 
 const STRIDE: u32 = 10u;
 
@@ -425,6 +426,18 @@ fn sheet_after(s: u32) {
 
 fn debye_index(g: vec3<u32>) -> u32 {
     return g.y * 65535u * 64u + g.x;
+}
+
+@compute @workgroup_size(64, 1, 1)
+fn wire_h(@builtin(global_invocation_id) g: vec3<u32>) {
+    let s = debye_index(g);
+    if s >= P.wires { return; }
+    let b = s * 9u;
+    var dh = 0.0;
+    for (var t = 1u; t < 9u; t += 2u) {
+        dh += bitcast<f32>(wire[b + t + 1u]) * e_ro[wire[b + t]];
+    }
+    h[wire[b]] += dh;
 }
 
 @compute @workgroup_size(64, 1, 1)

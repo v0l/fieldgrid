@@ -67,12 +67,6 @@ same rule.
 - No Pst flicker readout (EN 61000-3-3): it needs the IEC 61000-4-15 flickermeter on the
   supply voltage over minutes of transient. (agentee TODO)
 
-## sims-field
-
-- PEC wires are single grid lines, so they behave like a wire about a quarter of a cell in
-  radius; a thin-wire model would let the wire radius count.
-  (`antenna-toolbox/docs/validation.md`)
-
 ## sims-hf and sims-propagation
 
 - P.533 (`sims-hf`): the mirror-reflection height term G omits the `90.47·xr` term the Recommendation has

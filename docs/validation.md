@@ -57,12 +57,21 @@ xfemm at seven rotor angles.
 | near fields | nec2c NE/NH cards | `crates/sims-antenna/tests/validate.rs` | 1% |
 | characteristic modes | scipy `eig(X, R)` | `crates/sims-antenna/tests/validate.rs` | 1e-3 |
 | FDTD dipole | energy balance, MoM | `crates/sims-antenna/tests/fdtd.rs` | 1% power, 2.15 dBi |
+| FDTD thin-wire dipole, radius 0.06 to 0.45 mm | the moment method, same radius | `crates/sims-antenna/tests/thin_wire.rs` | within 1.2% at 1.5 mm cells, 2.3% at 3 mm |
 | FDTD microstrip patch, boxes and meshes | Sheen et al. 1990, measured 7.5 GHz | `crates/sims-antenna/tests/fdtd.rs` | within 1.5% |
 
 ## sims-field
 
 `crates/sims-field/tests/fdtd.rs`: an empty cavity rings at its analytic modes; every kernel
-steps the same on the CPU and the GPU (4e-7; WebGPU 2.7e-4).
+steps the same on the CPU and the GPU (4e-7; WebGPU 2.7e-4); thin wires at both ends of their
+radius range ring in a closed cavity for 40,000 steps without growing.
+
+Thin wires scale the permeability of the four magnetic components circling the wire by 1/f and
+the permittivity of the electric edges leaving it by f, with f = 2 / ln(cell / radius), so the
+first ring of cells carries the inductance and capacitance of the wire it stands for. Scaling
+both sides keeps the update symmetric; scaling only the magnetic side (Taflove's contour form)
+grew without bound after about 8,000 steps. The time step shrinks by the square root of the
+largest f or 1/f, which limits the radius to between a 55th and half of a cell.
 
 ## sims-circuit
 

@@ -128,6 +128,7 @@ mod tests {
     fn a_patch_mesh_keeps_its_lines_and_grows_smoothly() {
         let m = Model {
             parts: Vec::new(),
+            wires: Vec::new(),
             metal: vec![
                 Aabb::new([-0.04, -0.04, 0.0], [0.04, 0.04, 0.0]),
                 Aabb::new([-0.02, -0.015, 0.0016], [0.02, 0.015, 0.0016]),

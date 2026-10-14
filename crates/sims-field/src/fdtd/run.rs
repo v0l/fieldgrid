@@ -27,7 +27,8 @@ struct Params {
     patches: u32,
     debye: u32,
     wide: u32,
-    pad: [u32; 2],
+    wires: u32,
+    pad: u32,
 }
 
 #[derive(Clone, Default)]
@@ -182,6 +183,7 @@ pub(super) struct Packed {
     pub axes: Vec<f32>,
     pub source: Vec<f32>,
     pub inductor: Vec<f32>,
+    pub wire: Vec<u32>,
     pub sheets: Vec<f32>,
     pub sheet_count: usize,
     pub states: usize,
@@ -246,6 +248,14 @@ pub(super) fn pack(
     for (comp, id, ke, ki) in &sim.inductors {
         inductor.extend_from_slice(&[*comp as f32, *id as f32, *ke, *ki, 0.0]);
     }
+    let wire: Vec<u32> = sim
+        .wires
+        .iter()
+        .flat_map(|w| {
+            std::iter::once(w.h as u32)
+                .chain(w.terms.iter().flat_map(|t| [t.0 as u32, t.1.to_bits()]))
+        })
+        .collect();
     let mut sheets = Vec::new();
     let states = sim.sheet_states;
     for s in &sim.sheets {
@@ -345,6 +355,7 @@ pub(super) fn pack(
         axes,
         source,
         inductor,
+        wire,
         sheets,
         sheet_count,
         states,
@@ -398,6 +409,7 @@ pub async fn run(
         axes,
         source,
         inductor,
+        wire,
         sheets,
         sheet_count,
         states,
@@ -447,7 +459,8 @@ pub async fn run(
         patches: extras.ntff.as_ref().map(|v| v.len() / 13).unwrap_or(0) as u32,
         debye: debye_count as u32,
         wide: coef.wide as u32,
-        pad: [0; 2],
+        wires: sim.wires.len() as u32,
+        pad: 0,
     };
     let nonempty = |v: Vec<f32>| if v.is_empty() { vec![0.0f32; 4] } else { v };
     let b_e = g.zeroed("e", (3 * nn * 4) as u64);
@@ -461,6 +474,7 @@ pub async fn run(
     let b_series = g.zeroed("series", (cap * ports * 2 * 4) as u64);
     let b_source = g.storage("source", &nonempty(source));
     let b_inductor = g.storage("inductor", &nonempty(inductor));
+    let b_wire = g.storage("wire", &if wire.is_empty() { vec![0u32; 9] } else { wire });
     let b_probe = g.storage("probe", &nonempty(probe_def));
     let b_partial = g.zeroed("partial", 1024 * 4);
     let b_edges = g.storage("edges", &nonempty(port_edges));
@@ -527,7 +541,7 @@ pub async fn run(
         fields(&b_e2, &b_e2, &b_h2, &b_h2, &b_psi2, &b_psi2),
         fields(&b_e, &b_e, &b_h, &b_h, &b_psi, &b_psi),
     ];
-    let group1: [(u32, &wgpu::Buffer); 14] = [
+    let group1: [(u32, &wgpu::Buffer); 15] = [
         (0, &b_inductor),
         (1, &b_probe),
         (2, &b_partial),
@@ -542,6 +556,7 @@ pub async fn run(
         (11, &b_debye_edges),
         (12, &b_debye_table),
         (13, &b_debye_state),
+        (14, &b_wire),
     ];
     let make_with = |entry: &str, uses0: &[u32], uses1: &[u32], set0: &[(u32, &wgpu::Buffer)]| {
         let pipe = g.device.create_compute_pipeline(&wgpu::ComputePipelineDescriptor {
@@ -594,10 +609,18 @@ pub async fn run(
     } else {
         debye_groups
     };
+    let wire_groups = {
+        let groups = (sim.wires.len() as u32).div_ceil(64);
+        if groups > 65535 { [65535, groups.div_ceil(65535), 1] } else { [groups, 1, 1] }
+    };
     if fused {
         let blocks =
             [(n[2] as u32).div_ceil(tk), (n[1] as u32).div_ceil(tj), (n[0] as u32).div_ceil(4)];
         for (parity, entry) in ["step_even", "step_odd"].iter().enumerate() {
+            if !sim.wires.is_empty() {
+                let pipe = make_with("wire_h", &[4, 8, 9], &[14], &latest[1 - parity]);
+                pipes.push((parity, pipe, wire_groups));
+            }
             let uses0 = [0, 1, 2, 3, 4, 5, 8, 9, 10, 11, 12];
             pipes.push((parity, make_with(entry, &uses0, &[], &stepped[parity]), blocks));
             let fix = &fixing[parity];
@@ -613,6 +636,9 @@ pub async fn run(
             pipes.push((parity, pipe, [lumped_n, 1, 1]));
         }
     } else {
+        if !sim.wires.is_empty() {
+            pipes.push((2, make("wire_h", &[4, 8, 9], &[14]), wire_groups));
+        }
         pipes.push((2, make("update_h", &[2, 3, 4, 5, 8, 9], &[]), grid));
         if sheet_count > 0 {
             pipes.push((2, make("sheet_pre", &[0, 4, 10], &[9]), sheet_groups));

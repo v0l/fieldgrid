@@ -7,6 +7,7 @@ fn dipole() -> Model {
     let (len, g) = (0.141, 0.003);
     Model {
         parts: Vec::new(),
+        wires: Vec::new(),
         metal: vec![
             Aabb::new([0.0, 0.0, -len / 2.0], [0.0, 0.0, -g / 2.0]),
             Aabb::new([0.0, 0.0, g / 2.0], [0.0, 0.0, len / 2.0]),
@@ -102,6 +103,7 @@ fn sheen(meshed: bool) -> Model {
     let board = ([-gx / 2.0, edge_y, 0.0], [gx / 2.0, top, h]);
     let mut model = Model {
         parts: Vec::new(),
+        wires: Vec::new(),
         metal: Vec::new(),
         dielectrics: Vec::new(),
         port: Some(Port {

@@ -1,5 +1,5 @@
 use super::mesh::Grid;
-use super::{Aabb, EPS0, Model, Port, Stuff};
+use super::{Aabb, EPS0, Model, Port, Stuff, Wire};
 use sims_field::Bvh;
 use sims_field::fdtd::{Edge, Materials, Media, PortDef};
 use sims_field::raster::{closed, sheet_edges, solid_cells, solid_edges};
@@ -84,9 +84,34 @@ fn port_def(grid: &Grid, p: Port) -> PortDef {
     PortDef { name: "feed".into(), columns: vec![edges], r: p.r, reference_above: false }
 }
 
-pub fn build(grid: Grid, model: &Model, port: Port) -> Sim {
+fn wire_edges(grid: &Grid, wires: &[Wire]) -> Result<Vec<(Edge, f64)>, String> {
+    let mut edges = Vec::new();
+    for w in wires {
+        let along: Vec<usize> = (0..3).filter(|&t| (w.b[t] - w.a[t]).abs() > 1e-9).collect();
+        let [axis] = along[..] else {
+            return Err("a thin wire must run along one axis of the grid".into());
+        };
+        let at = [0, 1, 2].map(|t| grid.nearest(t, w.a[t].min(w.b[t])));
+        let end = grid.nearest(axis, w.a[axis].max(w.b[axis]));
+        for s in at[axis]..end {
+            let mut q = at;
+            q[axis] = s;
+            edges.push((Edge { comp: axis, at: q }, w.radius));
+        }
+    }
+    Ok(edges)
+}
+
+pub fn build(grid: Grid, model: &Model, port: Port) -> Result<Sim, String> {
     let mats = materials(&grid, model);
-    let mut mask = metal_edges(&grid, &model.metal);
+    let wires = wire_edges(&grid, &model.wires)?;
+    let solid: Vec<Aabb> = model
+        .metal
+        .iter()
+        .copied()
+        .chain(model.wires.iter().map(|w| Aabb::new(w.a, w.b)))
+        .collect();
+    let mut mask = metal_edges(&grid, &solid);
     for part in model.parts.iter().filter(|p| p.stuff == Stuff::Metal) {
         let mut add = |more: [Vec<bool>; 3]| {
             for (edges, extra) in mask.iter_mut().zip(more) {
@@ -101,5 +126,5 @@ pub fn build(grid: Grid, model: &Model, port: Port) -> Sim {
     let n = grid.dims();
     let pec = |c: usize, p: [usize; 3]| mask[c][idx(n, p[0], p[1], p[2])];
     let ports = vec![port_def(&grid, port)];
-    Sim::new(grid, &mats, &pec, &[], ports, &[], Media::default())
+    Sim::try_new(grid, &mats, &pec, &[], ports, &[], Media { wires, ..Default::default() })
 }

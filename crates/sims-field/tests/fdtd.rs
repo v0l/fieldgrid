@@ -100,8 +100,15 @@ fn everything() -> Sim {
             faces: [0, 1],
         })
         .collect();
-    let media = Media { sheets: sheet_table(), debye };
-    Sim::new(grid, &mats, &pec, &lumped, ports, &resistive, media)
+    let wires: Vec<(Edge, f64)> = (10..14)
+        .map(|k| Edge { comp: 2, at: [8, 16, k] })
+        .chain((8..12).map(|i| Edge { comp: 0, at: [i, 16, 14] }))
+        .map(|e| (e, 0.2e-3))
+        .collect();
+    let media = Media { sheets: sheet_table(), debye, wires };
+    let sim = Sim::new(grid, &mats, &pec, &lumped, ports, &resistive, media);
+    assert!(sim.wires.len() > 30);
+    sim
 }
 
 fn extras(sim: &Sim, steps: usize, fused_e: bool) -> Extras {
@@ -225,6 +232,56 @@ fn an_empty_cavity_rings_at_its_analytic_modes() {
             .unwrap();
         let err = (peak / fa - 1.0).abs();
         assert!(err < 0.004, "mode {m}{nn}{p}: {peak:.4e} vs {fa:.4e} ({:.3}%)", err * 100.0);
+    }
+}
+
+#[test]
+fn thin_wires_at_either_end_of_their_radius_stay_stable() {
+    let (a, b, d) = (0.10, 0.07, 0.05);
+    let xs: Vec<f64> = (0..=22).map(|i| a * i as f64 / 22.0).collect();
+    let ys: Vec<f64> = (0..=18).map(|i| b * i as f64 / 18.0).collect();
+    let zs: Vec<f64> = (0..=13).map(|i| d * i as f64 / 13.0).collect();
+    let grid = Grid { x: xs, y: ys, z: zs, pml: 0 };
+    let n = grid.dims();
+    let port = PortDef {
+        name: "probe".into(),
+        columns: vec![vec![Edge { comp: 2, at: [n[0] / 3, n[1] / 3, n[2] / 3] }]],
+        r: 1e7,
+        reference_above: false,
+    };
+    for radius in [0.09e-3, 1.7e-3] {
+        let wires: Vec<(Edge, f64)> = (3..9)
+            .map(|k| Edge { comp: 2, at: [11, 9, k] })
+            .chain((11..15).map(|i| Edge { comp: 0, at: [i, 9, 9] }))
+            .map(|e| (e, radius))
+            .collect();
+        let media = Media { wires, ..Default::default() };
+        let mats = Materials::new(&grid);
+        let sim = Sim::new(grid.clone(), &mats, &|_, _| false, &[], vec![port.clone()], &[], media);
+        let extras = Extras { max_steps: 40_000, decay_db: f64::INFINITY, ..Default::default() };
+        let pulse = Pulse { f0: 3.0e9, fc: 2.5e9 };
+        let rec = fdtd::run_cpu(&sim, 0, &pulse, &extras, &mut |_, _| true).unwrap();
+        let v: Vec<f32> = rec.series.as_chunks::<2>().0.iter().map(|p| p[0].abs()).collect();
+        let peak = |r: std::ops::Range<usize>| v[r].iter().copied().fold(0.0f32, f32::max);
+        let (early, late) = (peak(5_000..10_000), peak(35_000..40_000));
+        assert!(late < 2.0 * early, "radius {radius}: {early} early, {late} late");
+    }
+}
+
+#[test]
+fn a_thin_wire_outside_its_radius_range_is_refused() {
+    let grid = Grid {
+        x: (0..=10).map(|i| i as f64 * 1e-3).collect(),
+        y: (0..=10).map(|i| i as f64 * 1e-3).collect(),
+        z: (0..=10).map(|i| i as f64 * 1e-3).collect(),
+        pml: 0,
+    };
+    let mats = Materials::new(&grid);
+    for radius in [0.6e-3, 0.01e-3] {
+        let media =
+            Media { wires: vec![(Edge { comp: 2, at: [5, 5, 4] }, radius)], ..Default::default() };
+        let err = Sim::try_new(grid.clone(), &mats, &|_, _| false, &[], vec![], &[], media).err();
+        assert!(err.is_some_and(|e| e.contains("from a 55th to half of its cell")));
     }
 }
 

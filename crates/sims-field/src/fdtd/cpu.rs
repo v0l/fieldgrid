@@ -267,6 +267,10 @@ impl State<'_> {
     fn step(&mut self, n: usize) {
         let nn = self.p.nn;
         self.update_h();
+        for w in self.p.wire.as_chunks::<9>().0 {
+            let e = |k: usize| f32::from_bits(w[k + 1]) * self.e[w[k] as usize];
+            self.h[w[0] as usize] += e(1) + e(3) + e(5) + e(7);
+        }
         for s in 0..self.p.sheet_count {
             let b = s * 16;
             let f = self.sheets[b].to_bits() as usize;

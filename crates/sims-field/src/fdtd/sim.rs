@@ -185,6 +185,13 @@ pub struct Sim {
     pub sheet_states: usize,
     pub debye: Debye,
     pub debye_edges: Vec<(usize, usize, f64)>,
+    pub wires: Vec<WireH>,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub struct WireH {
+    pub h: usize,
+    pub terms: [(usize, f32); 4],
 }
 
 #[derive(Clone, Copy, Debug)]
@@ -230,6 +237,7 @@ impl Default for Sheets {
 pub struct Media {
     pub sheets: Sheets,
     pub debye: Debye,
+    pub wires: Vec<(Edge, f64)>,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -292,6 +300,41 @@ impl Materials {
     }
 }
 
+fn wire_factor(d: f64, radius: f64) -> Result<f64, String> {
+    let (lo, hi) = (d * (-4.0f64).exp(), 0.5 * d);
+    if radius >= lo && radius < hi {
+        Ok(2.0 / (d / radius).ln())
+    } else {
+        Err(format!(
+            "a thin wire's radius must be from a 55th to half of its cell \
+             ({lo:.3e} to {hi:.3e} m), not {radius:.3e} m"
+        ))
+    }
+}
+
+fn wire_cells(grid: &Grid, wires: &[(Edge, f64)]) -> Result<Vec<f64>, String> {
+    let n = grid.dims();
+    let mut out = Vec::new();
+    for &(e, radius) in wires {
+        let (w, p) = (e.comp, e.at);
+        let mut end = p;
+        end[w] += 1;
+        let clear = |q: [usize; 3]| (0..3).all(|a| q[a] > grid.pml && q[a] + 1 + grid.pml < n[a]);
+        if !clear(p) || !clear(end) {
+            return Err("a thin wire must stay clear of the grid's absorbing layer".into());
+        }
+        for axis in [(w + 1) % 3, (w + 2) % 3] {
+            let line = grid.axis(axis);
+            for node in [p, end] {
+                for cell in [node[axis], node[axis] - 1] {
+                    out.push(wire_factor(line[cell + 1] - line[cell], radius)?);
+                }
+            }
+        }
+    }
+    Ok(out)
+}
+
 impl Sim {
     pub fn new(
         grid: Grid,
@@ -302,8 +345,23 @@ impl Sim {
         resistive: &[Resistive],
         media: Media,
     ) -> Sim {
-        let Media { sheets: sheet_model, debye } = media;
-        let dt = time_step(&grid);
+        Sim::try_new(grid, mats, pec, lumped, ports, resistive, media)
+            .unwrap_or_else(|e| panic!("{e}"))
+    }
+
+    pub fn try_new(
+        grid: Grid,
+        mats: &Materials,
+        pec: &dyn Fn(usize, [usize; 3]) -> bool,
+        lumped: &[Lumped],
+        ports: Vec<PortDef>,
+        resistive: &[Resistive],
+        media: Media,
+    ) -> Result<Sim, String> {
+        let Media { sheets: sheet_model, debye, wires } = media;
+        let speedup =
+            wire_cells(&grid, &wires)?.iter().map(|f| f.max(1.0 / f)).fold(1.0f64, f64::max);
+        let dt = time_step(&grid) / speedup.sqrt();
         let pml = grid.pml;
         let ax = [axis(&grid.x, pml, dt), axis(&grid.y, pml, dt), axis(&grid.z, pml, dt)];
         let n = grid.dims();
@@ -474,7 +532,7 @@ impl Sim {
                 }
             }
         }
-        Sim {
+        let mut sim = Sim {
             grid,
             ax,
             dt,
@@ -489,7 +547,91 @@ impl Sim {
             sheet_states: sheet_model.states,
             debye,
             debye_edges,
+            wires: Vec::new(),
+        };
+        sim.thin_wire(&wires)?;
+        Ok(sim)
+    }
+
+    fn thin_wire(&mut self, edges: &[(Edge, f64)]) -> Result<(), String> {
+        let n = self.dims();
+        let nn = n[0] * n[1] * n[2];
+        let k_mu = self.dt / MU0;
+        let key = |c: usize, p: [usize; 3]| c * nn + idx(n, p[0], p[1], p[2]);
+        let on_wire: std::collections::HashSet<usize> =
+            edges.iter().map(|(e, _)| key(e.comp, e.at)).collect();
+        let factor = wire_factor;
+        let mut scaled_h: std::collections::BTreeMap<usize, ([usize; 3], usize, f64)> =
+            Default::default();
+        let mut scaled_e: std::collections::BTreeMap<usize, f64> = Default::default();
+        for &(e, radius) in edges {
+            let (w, p) = (e.comp, e.at);
+            let mut end = p;
+            end[w] += 1;
+            for axis in [(w + 1) % 3, (w + 2) % 3] {
+                let c = 3 - w - axis;
+                for (cell, q) in [
+                    (p[axis], p),
+                    (p[axis] - 1, {
+                        let mut q = p;
+                        q[axis] -= 1;
+                        q
+                    }),
+                ] {
+                    let f = factor(self.ax[axis].d[cell], radius)?;
+                    scaled_h.entry(key(c, q)).or_insert((q, c, f));
+                }
+                for node in [p, end] {
+                    for (cell, at) in [
+                        (node[axis], node),
+                        (node[axis] - 1, {
+                            let mut q = node;
+                            q[axis] -= 1;
+                            q
+                        }),
+                    ] {
+                        let id = key(axis, at);
+                        if !on_wire.contains(&id) {
+                            let f = factor(self.ax[axis].d[cell], radius)?;
+                            scaled_e.entry(id).or_insert(f);
+                        }
+                    }
+                }
+            }
         }
+        for (&id, &f) in &scaled_e {
+            let (c, at) = (id / nn, id % nn);
+            let (ca, cb) = (self.ca[c][at] as f64, self.cb[c][at] as f64);
+            if cb == 0.0 {
+                continue;
+            }
+            let a = (1.0 - ca) / (1.0 + ca);
+            let scaled = a / f;
+            self.ca[c][at] = ((1.0 - scaled) / (1.0 + scaled)) as f32;
+            self.cb[c][at] = (cb * (1.0 + a) / (f * (1.0 + scaled))) as f32;
+        }
+        self.wires.clear();
+        for (h, (q, c, f)) in scaled_h {
+            let (u, v) = ((c + 1) % 3, (c + 2) % 3);
+            let s = (f - 1.0) * k_mu;
+            let (du, dv) = (self.ax[u].inv_d[q[u]] as f64, self.ax[v].inv_d[q[v]] as f64);
+            let mut qu = q;
+            qu[u] += 1;
+            let mut qv = q;
+            qv[v] += 1;
+            let all = [
+                (key(v, qu), -s * du),
+                (key(v, q), s * du),
+                (key(u, qv), s * dv),
+                (key(u, q), -s * dv),
+            ];
+            let mut terms = [(h, 0.0f32); 4];
+            for (slot, (e, c)) in all.into_iter().filter(|t| !on_wire.contains(&t.0)).enumerate() {
+                terms[slot] = (e, c as f32);
+            }
+            self.wires.push(WireH { h, terms });
+        }
+        Ok(())
     }
 
     pub fn dims(&self) -> [usize; 3] {

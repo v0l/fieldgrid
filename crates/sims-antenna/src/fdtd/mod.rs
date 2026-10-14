@@ -38,6 +38,13 @@ pub struct Dielectric {
 }
 
 #[derive(Clone, Copy, Debug, PartialEq)]
+pub struct Wire {
+    pub a: [f64; 3],
+    pub b: [f64; 3],
+    pub radius: f64,
+}
+
+#[derive(Clone, Copy, Debug, PartialEq)]
 pub struct Port {
     pub a: [f64; 3],
     pub b: [f64; 3],
@@ -111,6 +118,7 @@ impl Part {
 pub struct Model {
     pub parts: Vec<Part>,
     pub metal: Vec<Aabb>,
+    pub wires: Vec<Wire>,
     pub dielectrics: Vec<Dielectric>,
     pub port: Option<Port>,
     pub f0: f64,
@@ -125,6 +133,7 @@ impl Model {
             .metal
             .iter()
             .copied()
+            .chain(self.wires.iter().map(|w| Aabb::new(w.a, w.b)))
             .chain(self.dielectrics.iter().map(|d| d.bounds))
             .chain(self.parts.iter().filter_map(Part::bounds))
             .chain(self.port.iter().map(|p| Aabb::new(p.a, p.b)));
@@ -191,8 +200,10 @@ fn setup(model: &Model, opts: &Options) -> Result<Setup, String> {
     if open {
         return Err("a dielectric part is not a closed mesh".into());
     }
-    let grid = mesh::mesh(model, opts.pml).ok_or("nothing to mesh")?;
-    let sim = engine::build(grid.clone(), model, port);
+    let mut solid = model.clone();
+    solid.metal.extend(model.wires.iter().map(|w| Aabb::new(w.a, w.b)));
+    let grid = mesh::mesh(&solid, opts.pml).ok_or("nothing to mesh")?;
+    let sim = engine::build(grid.clone(), model, port)?;
     let f0 = model.f0;
     let fc = f0 * 0.5;
     let freqs: Vec<f64> = (0..opts.points)
