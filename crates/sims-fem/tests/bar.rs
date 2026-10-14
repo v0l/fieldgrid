@@ -126,22 +126,19 @@ fn meshing_and_solving_report_progress() {
     assert!(stages.len() > 1, "{stages:?}");
 }
 
-fn bonded_nodes(gap: f64, exact: bool) -> usize {
+fn bonded_nodes(gap: f64, apart: &[(usize, usize)]) -> usize {
     let left = Quadratic::from(&fill(bar(2.5), 2.5).expect("meshes"));
     let mut right = Quadratic::from(&fill(bar(2.5), 2.5).expect("meshes"));
     right.nodes.iter_mut().for_each(|p| p.x += LENGTH + gap);
-    let nodes = [left.nodes.clone(), right.nodes.clone()];
-    let plane = |part: usize, _: usize, corner: u32, p: Point3| {
-        exact.then(|| (p.x - nodes[part][corner as usize].x).abs())
-    };
     let parts = vec![("left".to_string(), left), ("right".to_string(), right)];
-    let merged = sims_fem::merge(parts, &[0.25, 0.25], &[], &[], &plane).expect("merges");
+    let merged = sims_fem::merge(parts, &[0.25, 0.25], &[], &[], apart).expect("merges");
     merged.bonds.iter().map(|b| b.2).sum()
 }
 
 #[test]
-fn bars_bond_where_they_touch_and_not_across_a_clearance() {
-    assert!(bonded_nodes(0.0, true) > 50);
-    assert!(bonded_nodes(0.2, false) > 50);
-    assert_eq!(bonded_nodes(0.2, true), 0);
+fn bars_bond_across_a_small_gap_unless_kept_apart() {
+    assert!(bonded_nodes(0.0, &[]) > 50);
+    assert!(bonded_nodes(0.2, &[]) > 50);
+    assert_eq!(bonded_nodes(0.2, &[(0, 1)]), 0);
+    assert_eq!(bonded_nodes(0.4, &[]), 0);
 }
