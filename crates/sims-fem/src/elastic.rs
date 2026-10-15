@@ -476,6 +476,8 @@ pub fn projectors(mesh: &Quadratic, supports: &[Support]) -> (Vec<Block>, Vec<Op
     let mut normals: Vec<Vec<Vector3>> = vec![Vec::new(); mesh.nodes.len()];
     let mut fixed = vec![false; mesh.nodes.len()];
     let mut owner: Vec<Option<usize>> = vec![None; mesh.nodes.len()];
+    let surface: std::collections::HashMap<(usize, u32), Vector3> =
+        mesh.normals.iter().map(|(tag, v, n)| ((*tag, *v), *n)).collect();
     for (s, support) in supports.iter().enumerate() {
         if let Hold::Bearing { point, axis, axial } = support.hold {
             let ring = bearing_ring(mesh, &support.faces, point, axis);
@@ -491,7 +493,9 @@ pub fn projectors(mesh: &Quadratic, supports: &[Support]) -> (Vec<Block>, Vec<Op
             }
             continue;
         }
-        for face in faces_of(mesh, &support.faces) {
+        for (face, tag) in mesh.boundary.iter().filter(|(_, tag)| support.faces.contains(tag)) {
+            let face = *face;
+            let tag = *tag;
             let p = six(mesh, face);
             for (k, &node) in face.iter().enumerate() {
                 owner[node as usize].get_or_insert(s);
@@ -506,15 +510,20 @@ pub fn projectors(mesh: &Quadratic, supports: &[Support]) -> (Vec<Block>, Vec<Op
                         }
                     }
                     Hold::Slide => {
-                        let l = match k {
-                            0 => [1.0, 0.0, 0.0],
-                            1 => [0.0, 1.0, 0.0],
-                            2 => [0.0, 0.0, 1.0],
-                            3 => [0.5, 0.5, 0.0],
-                            4 => [0.0, 0.5, 0.5],
-                            _ => [0.5, 0.0, 0.5],
+                        let n = match surface.get(&(tag, node)) {
+                            Some(n) => *n,
+                            None => {
+                                let l = match k {
+                                    0 => [1.0, 0.0, 0.0],
+                                    1 => [0.0, 1.0, 0.0],
+                                    2 => [0.0, 0.0, 1.0],
+                                    3 => [0.5, 0.5, 0.0],
+                                    4 => [0.0, 0.5, 0.5],
+                                    _ => [0.5, 0.0, 0.5],
+                                };
+                                triangle_area_vector(&p, l)
+                            }
                         };
-                        let n = triangle_area_vector(&p, l);
                         if n.magnitude() > 0.0 {
                             normals[node as usize].push(n.normalize());
                         }

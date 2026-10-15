@@ -161,6 +161,7 @@ pub struct Quadratic {
     pub bodies: Vec<String>,
     pub ties: Vec<Tie>,
     pub bonds: Vec<(usize, usize, usize)>,
+    pub normals: Vec<(usize, u32, Vector3)>,
 }
 
 pub fn shape(l: [f64; 4]) -> [f64; 10] {
@@ -245,6 +246,7 @@ impl Quadratic {
             bodies: Vec::new(),
             ties: Vec::new(),
             bonds: Vec::new(),
+            normals: Vec::new(),
         }
     }
 
@@ -412,9 +414,57 @@ impl Quadratic {
             bodies: Vec::new(),
             ties: Vec::new(),
             bonds: Vec::new(),
+            normals: Vec::new(),
         };
         quadratic.straighten_bad(mesh);
+        quadratic.surface_normals(mesh);
         quadratic
+    }
+
+    fn surface_normals<S: Surface>(&mut self, mesh: &TetMesh<S>) {
+        let uv = |v: u32, tag: usize| -> Option<Vector2> {
+            mesh.uvs.get(&v)?.iter().find(|(f, _)| *f == tag).map(|(_, uv)| *uv)
+        };
+        let normal = |surface: &S, uv: Vector2| -> Option<Vector3> {
+            let step = 1.0e-4;
+            let at = surface.at(uv)?;
+            let du = surface.at(uv + Vector2::new(step, 0.0))? - at;
+            let dv = surface.at(uv + Vector2::new(0.0, step))? - at;
+            let n = du.cross(dv);
+            (n.magnitude() > 0.0).then(|| n.normalize())
+        };
+        for (f, tag) in &self.boundary {
+            let surface = &mesh.surfaces[*tag];
+            let own = [f[0], f[1], f[2]].map(|v| {
+                let uv = uv(v, *tag).or_else(|| surface.nearest(self.nodes[v as usize], None));
+                uv.and_then(|uv| normal(surface, uv))
+            });
+            let middle = |k: usize| {
+                let (a, b) = (k - 3, (k - 2) % 3);
+                let (va, vb) = (f[a], f[b]);
+                let pair = || {
+                    let near = |v: u32| {
+                        uv(v, *tag).or_else(|| surface.nearest(self.nodes[v as usize], None))
+                    };
+                    near(va).zip(near(vb))
+                };
+                match (own[a], own[b], pair()) {
+                    (found, None, _) | (None, found, _) => found,
+                    (Some(_), Some(_), Some((ua, ub))) => normal(surface, (ua + ub) * 0.5),
+                    (Some(_), Some(_), None) => {
+                        own[a].zip(own[b]).map(|(a, b)| (a + b) * 0.5).map(Vector3::normalize)
+                    }
+                }
+            };
+            let mut pushed: Vec<u32> = Vec::new();
+            for (k, &v) in f.iter().enumerate() {
+                let n = if k < 3 { own[k] } else { middle(k) };
+                if let (Some(n), false) = (n, pushed.contains(&v)) {
+                    pushed.push(v);
+                    self.normals.push((*tag, v, n));
+                }
+            }
+        }
     }
 
     fn straighten_bad<S>(&mut self, mesh: &TetMesh<S>) {
@@ -534,6 +584,8 @@ pub fn merge(
         out.boundary.extend(
             part.boundary.iter().map(|(f, tag)| (f.map(|v| v + offset), index * STRIDE + tag)),
         );
+        out.normals
+            .extend(part.normals.iter().map(|(tag, v, n)| (index * STRIDE + tag, v + offset, *n)));
         out.faces = out.faces.max(index * STRIDE + part.faces);
         out.bodies.push(name);
         skins.push(skin);
