@@ -1005,9 +1005,6 @@ impl<'a> Lattice<'a> {
                 usage: wgpu::BufferUsages::STORAGE,
             },
         );
-        if domain.heat.is_some() && !domain.rotors.is_empty() {
-            bail!("a turning rotor cannot carry heat yet");
-        }
         let bodies = domain
             .body
             .iter()
