@@ -759,7 +759,10 @@ pub fn solve(problem: &Problem) -> Result<Answer> {
             let trial: Vec<f64> = u.iter().zip(&step.x).map(|(a, b)| a + alpha * b).collect();
             let (next, e) = state(&trial, &limits);
             let after = energy(&trial, e);
-            if after <= before + 1.0e-4 * alpha * slope || alpha < 1.0e-4 {
+            let unchanged = !friction
+                && alpha == 1.0
+                && touches.iter().zip(&next).all(|(a, b)| a.closed == b.closed);
+            if unchanged || after <= before + 1.0e-4 * alpha * slope || alpha < 1.0e-4 {
                 r = residual(&trial, &next);
                 u = trial;
                 touches = next;
